@@ -34,14 +34,12 @@
 typedef struct SWITCHJoystickState
 {
     PadState pad;
-    u64 buttons;
-    HidAnalogStickState stick_l;
-    HidAnalogStickState stick_r;
+    HidAnalogStickState sticks_old[2];
     HidVibrationDeviceHandle vibrationDeviceHandles;
     HidVibrationValue vibrationValues;
 } SWITCHJoystickState;
 
-static SWITCHJoystickState joystickState[JOYSTICK_COUNT];
+static SWITCHJoystickState state[JOYSTICK_COUNT];
 
 static const HidNpadButton pad_mapping[] = {
     HidNpadButton_A, HidNpadButton_B, HidNpadButton_X, HidNpadButton_Y,
@@ -64,15 +62,15 @@ SWITCH_JoystickInit(void)
     padConfigureInput(JOYSTICK_COUNT, HidNpadStyleSet_NpadStandard);
 
     // initialize first pad to defaults
-    padInitializeDefault(&joystickState[0].pad);
-    padUpdate(&joystickState[0].pad);
+    padInitializeDefault(&state[0].pad);
+    padUpdate(&state[0].pad);
 
     // initialize pad and vibrations for pad 1 to 7
     for (int i = 1; i < JOYSTICK_COUNT; i++) {
-        padInitialize(&joystickState[i].pad, HidNpadIdType_No1 + i);
-        padUpdate(&joystickState[i].pad);
-        hidInitializeVibrationDevices(&joystickState[i].vibrationDeviceHandles,1,
-                                      HidNpadIdType_No1 + i, padGetStyleSet(&joystickState[i].pad));
+        padInitialize(&state[i].pad, HidNpadIdType_No1 + i);
+        padUpdate(&state[i].pad);
+        hidInitializeVibrationDevices(&state[i].vibrationDeviceHandles,1,
+                                      HidNpadIdType_No1 + i, padGetStyleSet(&state[i].pad));
     }
 
     return JOYSTICK_COUNT;
@@ -146,14 +144,14 @@ SWITCH_JoystickRumble(SDL_Joystick * joystick, Uint16 low_frequency_rumble, Uint
 {
     int id = joystick->instance_id;
 
-    joystickState[id].vibrationValues.amp_low =
-    joystickState[id].vibrationValues.amp_high = low_frequency_rumble == 0 ? 0.0f : 320.0f;
-    joystickState[id].vibrationValues.freq_low =
+    state[id].vibrationValues.amp_low =
+    state[id].vibrationValues.amp_high = low_frequency_rumble == 0 ? 0.0f : 320.0f;
+    state[id].vibrationValues.freq_low =
             low_frequency_rumble == 0 ? 160.0f : (float) low_frequency_rumble / 204;
-    joystickState[id].vibrationValues.freq_high =
+    state[id].vibrationValues.freq_high =
             high_frequency_rumble == 0 ? 320.0f : (float) high_frequency_rumble / 204;
 
-    hidSendVibrationValues(&joystickState[id].vibrationDeviceHandles, &joystickState[id].vibrationValues, 1);
+    hidSendVibrationValues(&state[id].vibrationDeviceHandles, &state[id].vibrationValues, 1);
 
     return 0;
 }
@@ -190,46 +188,43 @@ SWITCH_JoystickSetSensorsEnabled(SDL_Joystick *joystick, SDL_bool enabled)
 static void
 SWITCH_JoystickUpdate(SDL_Joystick *joystick)
 {
-    u64 changed;
-    static SWITCHJoystickState state_old[JOYSTICK_COUNT];
-
+    u64 diff;
     int index = (int) SDL_JoystickInstanceID(joystick);
     if (index > JOYSTICK_COUNT || SDL_IsTextInputActive()) {
         return;
     }
 
-    padUpdate(&joystickState[index].pad);
-    joystickState[index].stick_l = padGetStickPos(&joystickState[index].pad, 0);
-    joystickState[index].stick_r = padGetStickPos(&joystickState[index].pad, 1);
-    joystickState[index].buttons = padGetButtons(&joystickState[index].pad);
+    padUpdate(&state[index].pad);
 
-    // Axes
-    if (state_old[index].stick_l.x != joystickState[index].stick_l.x) {
-        SDL_PrivateJoystickAxis(joystick, 0, (Sint16) joystickState[index].stick_l.x);
-        state_old[index].stick_l.x = joystickState[index].stick_l.x;
+    // Axes (left)
+    if (state[index].sticks_old[0].x != state[index].pad.sticks[0].x) {
+        SDL_PrivateJoystickAxis(joystick, 0, (Sint16) state[index].pad.sticks[0].x);
+        state[index].sticks_old[0].x = state[index].pad.sticks[0].x;
     }
-    if (state_old[index].stick_l.y != joystickState[index].stick_l.y) {
-        SDL_PrivateJoystickAxis(joystick, 1, (Sint16) -joystickState[index].stick_l.y);
-        state_old[index].stick_l.y = -joystickState[index].stick_l.y;
+    if (state[index].sticks_old[0].y != state[index].pad.sticks[0].y) {
+        SDL_PrivateJoystickAxis(joystick, 1, (Sint16) -state[index].pad.sticks[0].y);
+        state[index].sticks_old[0].y = -state[index].pad.sticks[0].y;
     }
-    if (state_old[index].stick_r.x != joystickState[index].stick_r.x) {
-        SDL_PrivateJoystickAxis(joystick, 2, (Sint16) joystickState[index].stick_r.x);
-        state_old[index].stick_r.x = joystickState[index].stick_r.x;
+    state[index].sticks_old[0] = padGetStickPos(&state[index].pad, 0);
+    // Axes (right)
+    if (state[index].sticks_old[1].x != state[index].pad.sticks[1].x) {
+        SDL_PrivateJoystickAxis(joystick, 2, (Sint16) state[index].pad.sticks[1].x);
+        state[index].sticks_old[1].x = state[index].pad.sticks[1].x;
     }
-    if (state_old[index].stick_r.y != joystickState[index].stick_r.y) {
-        SDL_PrivateJoystickAxis(joystick, 3, (Sint16) -joystickState[index].stick_r.y);
-        state_old[index].stick_r.y = -joystickState[index].stick_r.y;
+    if (state[index].sticks_old[1].y != state[index].pad.sticks[1].y) {
+        SDL_PrivateJoystickAxis(joystick, 3, (Sint16) -state[index].pad.sticks[1].y);
+        state[index].sticks_old[1].y = -state[index].pad.sticks[1].y;
     }
+    state[index].sticks_old[1] = padGetStickPos(&state[index].pad, 1);
 
     // Buttons
-    changed = state_old[index].buttons ^ joystickState[index].buttons;
-    state_old[index].buttons = joystickState[index].buttons;
-    if (changed) {
+    diff = state[index].pad.buttons_old ^ state[index].pad.buttons_cur;
+    if (diff) {
         for (int i = 0; i < joystick->nbuttons; i++) {
-            if (changed & pad_mapping[i]) {
-                SDL_PrivateJoystickButton(joystick, (Uint8) i,
-                                          (Uint8) ((joystickState[index].buttons & pad_mapping[i]) ?
-                                                   SDL_PRESSED : SDL_RELEASED));
+            if (diff & pad_mapping[i]) {
+                SDL_PrivateJoystickButton(joystick, i,
+                                          state[index].pad.buttons_cur & pad_mapping[i] ?
+                                          SDL_PRESSED : SDL_RELEASED);
             }
         }
     }
