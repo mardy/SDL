@@ -89,17 +89,12 @@ static const u16 sdl_buttons_gc[] =
 {
 	PAD_BUTTON_A,
 	PAD_BUTTON_B,
-	0 /* 1 */,
-	0 /* 2 */,
-	0 /* - */,
-	PAD_TRIGGER_Z,
-	PAD_BUTTON_START,
-	0 /* Z */,
-	0 /* C */,
 	PAD_BUTTON_X,
 	PAD_BUTTON_Y,
 	PAD_TRIGGER_L,
-	PAD_TRIGGER_R
+	PAD_TRIGGER_R,
+	PAD_TRIGGER_Z,
+	PAD_BUTTON_START,
 };
 
 /* The private structure used to keep track of a joystick */
