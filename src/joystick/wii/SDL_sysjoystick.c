@@ -442,7 +442,6 @@ static void _HandleWiiJoystickUpdate(SDL_Joystick* joystick)
 	int axis, index;
 	joystick_hwdata *prev_state;
 	WPADData *data;
-	const u32 *buttons;
 	SDL_Joystick *joy_wiimote = NULL;
 	SDL_Joystick *joy_expansion = NULL;
 
@@ -476,10 +475,8 @@ static void _HandleWiiJoystickUpdate(SDL_Joystick* joystick)
 		}
 	} else {
 		if (data->exp.type == WPAD_EXP_CLASSIC) // classic controller
-			buttons = _buttons + 4;
-		else
-			buttons = _buttons;
-		HandleWiiHats(joystick, changed, pressed, buttons);
+			HandleWiiHats(joystick, changed, pressed, _buttons + 4);
+		HandleWiiHats(joystick, changed, pressed, _buttons);
 	}
 
 	if (split_joysticks) {
