@@ -329,6 +329,13 @@ static void _HandleWiiJoystickUpdate(SDL_Joystick* joystick)
 				(data->btns_d & sdl_buttons_wii[i]) ? SDL_PRESSED : SDL_RELEASED);
 	}
 
+	if (data->exp.type != prev_state->wiimote.exp)
+	{
+		// Reset the expansion's axes
+		for (int i = 0; i < 6; i++)
+			SDL_PrivateJoystickAxis(joystick, i, 0);
+	}
+
 	if(data->exp.type == WPAD_EXP_CLASSIC)
 	{
 		if (prev_state->wiimote.exp != WPAD_EXP_CLASSIC)
