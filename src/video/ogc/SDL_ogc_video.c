@@ -137,13 +137,12 @@ draw_init(void *palette, void *tex)
 	Mtx m, mv, view;
 
 	GX_ClearVtxDesc ();
-	GX_SetVtxDesc (GX_VA_POS, GX_INDEX8);
+	GX_SetVtxDesc (GX_VA_POS, GX_DIRECT);
 	GX_SetVtxDesc (GX_VA_TEX0, GX_INDEX8);
 
-	GX_SetVtxAttrFmt (GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_S16, 0);
+	GX_SetVtxAttrFmt (GX_VTXFMT0, GX_VA_POS, GX_POS_XY, GX_S16, 0);
 	GX_SetVtxAttrFmt (GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
 
-	GX_SetArray (GX_VA_POS, square, 3 * sizeof (s16));
 	GX_SetArray (GX_VA_TEX0, (void*)tex_pos, 2 * sizeof (f32));
 	GX_SetNumTexGens (1);
 	GX_SetNumChans (0);
@@ -200,7 +199,7 @@ draw_init(void *palette, void *tex)
 static inline void
 draw_vert (u8 index)
 {
-	GX_Position1x8 (index);
+	GX_Position2s16 (square[index*3],square[index*3+1]);
 	GX_TexCoord1x8 (index);
 }
 
