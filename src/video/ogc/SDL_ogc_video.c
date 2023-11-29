@@ -76,9 +76,9 @@ static SDL_Rect* modes_descending[] =
 #define HASPECT 			320
 #define VASPECT 			240
 
-unsigned char *xfb = NULL;
+unsigned char *xfb[2] = { NULL, NULL };
+int fb_index = 0;
 GXRModeObj* vmode = 0;
-static int quit_flip_thread = 0;
 static GXTexObj texobj_a, texobj_b;
 static GXTlutObj texpalette_a, texpalette_b;
 
@@ -214,37 +214,6 @@ draw_square ()
 	GX_End();
 }
 
-static void * flip_thread (void *arg)
-{
-	u32 *tex = (u32*)arg;
-
-	GX_SetCurrentGXThread();
-
-	// clear EFB
-	GX_CopyDisp(xfb, GX_TRUE);
-
-	SDL_mutexP(videomutex);
-
-	while(!quit_flip_thread)
-	{
-		// update texture
-		DCStoreRange((void*)tex[0], tex[1]);
-		// clear texture objects
-		GX_InvalidateTexAll();
-		draw_square(); // render textured quad
-
-		VIDEO_WaitVSync();
-		GX_CopyDisp(xfb, GX_FALSE);
-
-		GX_DrawDone();
-
-		SDL_CondWait(videocond, videomutex);
-	}
-	SDL_mutexV(videomutex);
-
-	return NULL;
-}
-
 static void
 SetupGX()
 {
@@ -275,16 +244,6 @@ SetupGX()
 	GX_Flush();
 }
 
-static void
-StartVideoThread(void *args)
-{
-	if(videothread == LWP_THREAD_NULL)
-	{
-		quit_flip_thread = 0;
-		LWP_CreateThread(&videothread, flip_thread, args, NULL, 0, 68);
-	}
-}
-
 void OGC_VideoStart(ogcVideo *private)
 {
 	if (private==NULL) {
@@ -295,7 +254,6 @@ void OGC_VideoStart(ogcVideo *private)
 
 	SetupGX();
 	draw_init(private->palette, private->texturemem);
-	StartVideoThread(&private->texturemem);
 #ifdef __wii__
 	WPAD_SetVRes(WPAD_CHAN_0, vresx+vresx/4, vresy+vresy/4);
 #endif
@@ -308,7 +266,6 @@ void OGC_VideoStop()
 		return;
 
 	SDL_LockMutex(videomutex);
-	quit_flip_thread = 1;
 	SDL_CondSignal(videocond);
 	SDL_UnlockMutex(videomutex);
 
@@ -611,6 +568,18 @@ static void flipHWSurface_16_16(_THIS, const SDL_Surface* const surface)
 	}
 	SDL_CondSignal(videocond);
 	SDL_mutexV(videomutex);
+
+	draw_square(); // render textured quad
+	GX_DrawDone();
+
+	GX_InvalidateTexAll();
+
+	fb_index ^= 1;
+
+	GX_CopyDisp(xfb[fb_index], GX_FALSE);
+	VIDEO_SetNextFramebuffer(xfb[fb_index]);
+	VIDEO_Flush();
+	VIDEO_WaitVSync();
 }
 
 static void OGC_UpdateRect(_THIS, SDL_Rect *rect)
@@ -814,11 +783,13 @@ OGC_InitVideoSystem()
 	VIDEO_Configure(vmode);
 
 	// Allocate the video buffer
-	if (xfb) free(MEM_K1_TO_K0(xfb));
-	xfb = (unsigned char*) MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
+	if (xfb[0]) free(MEM_K1_TO_K0(xfb[0]));
+	if (xfb[1]) free(MEM_K1_TO_K0(xfb[1]));
+	xfb[0] = (unsigned char*) MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
+	xfb[1] = (unsigned char*) MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
 
-	VIDEO_ClearFrameBuffer(vmode, xfb, COLOR_BLACK);
-	VIDEO_SetNextFramebuffer(xfb);
+	VIDEO_ClearFrameBuffer(vmode, xfb[0], COLOR_BLACK);
+	VIDEO_SetNextFramebuffer(xfb[0]);
 
 	// Show the screen.
 	VIDEO_SetBlack(FALSE);
@@ -853,8 +824,8 @@ void OGC_SetWidescreen(int wide)
 
 	VIDEO_Configure (vmode);
 
-	if (xfb)
-		VIDEO_ClearFrameBuffer(vmode, xfb, COLOR_BLACK);
+	if (xfb[0])
+		VIDEO_ClearFrameBuffer(vmode, xfb[0], COLOR_BLACK);
 
 	VIDEO_Flush();
 
