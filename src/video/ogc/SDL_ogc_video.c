@@ -48,9 +48,6 @@
 #include <ogc/machine/processor.h>
 
 static const char	OGCVID_DRIVER_NAME[] = "ogc-video";
-static lwp_t videothread = LWP_THREAD_NULL;
-static SDL_mutex *videomutex = NULL;
-static SDL_cond *videocond = NULL;
 static ogcVideo *current = NULL;
 
 int vresx=0, vresy=0;
@@ -76,9 +73,9 @@ static SDL_Rect* modes_descending[] =
 #define HASPECT 			320
 #define VASPECT 			240
 
-unsigned char *xfb = NULL;
+unsigned char *xfb[2] = { NULL, NULL };
+int fb_index = 0;
 GXRModeObj* vmode = 0;
-static int quit_flip_thread = 0;
 static GXTexObj texobj_a, texobj_b;
 static GXTlutObj texpalette_a, texpalette_b;
 
@@ -214,37 +211,6 @@ draw_square ()
 	GX_End();
 }
 
-static void * flip_thread (void *arg)
-{
-	u32 *tex = (u32*)arg;
-
-	GX_SetCurrentGXThread();
-
-	// clear EFB
-	GX_CopyDisp(xfb, GX_TRUE);
-
-	SDL_mutexP(videomutex);
-
-	while(!quit_flip_thread)
-	{
-		// update texture
-		DCStoreRange((void*)tex[0], tex[1]);
-		// clear texture objects
-		GX_InvalidateTexAll();
-		draw_square(); // render textured quad
-
-		VIDEO_WaitVSync();
-		GX_CopyDisp(xfb, GX_FALSE);
-
-		GX_DrawDone();
-
-		SDL_CondWait(videocond, videomutex);
-	}
-	SDL_mutexV(videomutex);
-
-	return NULL;
-}
-
 static void
 SetupGX()
 {
@@ -275,16 +241,6 @@ SetupGX()
 	GX_Flush();
 }
 
-static void
-StartVideoThread(void *args)
-{
-	if(videothread == LWP_THREAD_NULL)
-	{
-		quit_flip_thread = 0;
-		LWP_CreateThread(&videothread, flip_thread, args, NULL, 0, 68);
-	}
-}
-
 void OGC_VideoStart(ogcVideo *private)
 {
 	if (private==NULL) {
@@ -295,25 +251,10 @@ void OGC_VideoStart(ogcVideo *private)
 
 	SetupGX();
 	draw_init(private->palette, private->texturemem);
-	StartVideoThread(&private->texturemem);
 #ifdef __wii__
 	WPAD_SetVRes(WPAD_CHAN_0, vresx+vresx/4, vresy+vresy/4);
 #endif
 	current = private;
-}
-
-void OGC_VideoStop()
-{
-	if(videothread == LWP_THREAD_NULL)
-		return;
-
-	SDL_LockMutex(videomutex);
-	quit_flip_thread = 1;
-	SDL_CondSignal(videocond);
-	SDL_UnlockMutex(videomutex);
-
-	LWP_JoinThread(videothread, NULL);
-	videothread = LWP_THREAD_NULL;
 }
 
 static int OGC_VideoInit(_THIS, SDL_PixelFormat *vformat)
@@ -383,8 +324,6 @@ static SDL_Surface *OGC_SetVideoMode(_THIS, SDL_Surface *current,
 
 	bytes_per_pixel = bpp / 8;
 
-	OGC_VideoStop();
-
 	free(this->hidden->buffer);
 	free(this->hidden->texturemem);
 
@@ -420,7 +359,6 @@ static SDL_Surface *OGC_SetVideoMode(_THIS, SDL_Surface *current,
 		free(this->hidden->texturemem);
 		this->hidden->texturemem = NULL;
 
-		SDL_UnlockMutex(videomutex);
 		SDL_SetError("Couldn't allocate new pixel format for requested mode");
 		return NULL;
 	}
@@ -611,6 +549,18 @@ static void flipHWSurface_16_16(_THIS, const SDL_Surface* const surface)
 	}
 	SDL_CondSignal(videocond);
 	SDL_mutexV(videomutex);
+
+	draw_square(); // render textured quad
+	GX_DrawDone();
+
+	GX_InvalidateTexAll();
+
+	fb_index ^= 1;
+
+	GX_CopyDisp(xfb[fb_index], GX_FALSE);
+	VIDEO_SetNextFramebuffer(xfb[fb_index]);
+	VIDEO_Flush();
+	VIDEO_WaitVSync();
 }
 
 static void OGC_UpdateRect(_THIS, SDL_Rect *rect)
@@ -690,8 +640,6 @@ static int OGC_SetColors(_THIS, int first_color, int color_count, SDL_Color *col
 	Uint16* const palette = this->hidden->palette;
 	int     component;
 
-	SDL_LockMutex(videomutex);
-
 	/* Build the RGB24 palette. */
 	for (component = first_color; component != last_color; ++component, ++colors)
 	{
@@ -706,14 +654,11 @@ static int OGC_SetColors(_THIS, int first_color, int color_count, SDL_Color *col
 	GX_LoadTexObj(&texobj_a, GX_TEXMAP0);
 	GX_LoadTexObj(&texobj_b, GX_TEXMAP1);
 
-	SDL_UnlockMutex(videomutex);
-
 	return(1);
 }
 
 static void OGC_VideoQuit(_THIS)
 {
-	OGC_VideoStop();
 	GX_AbortFrame();
 	GX_Flush();
 
@@ -732,11 +677,6 @@ static void OGC_DeleteDevice(SDL_VideoDevice *device)
 {
 	free(device->hidden);
 	SDL_free(device);
-
-	SDL_DestroyCond(videocond);
-	videocond = 0;
-	SDL_DestroyMutex(videomutex);
-	videomutex=0;
 }
 
 static SDL_VideoDevice *OGC_CreateDevice(int devindex)
@@ -758,9 +698,6 @@ static SDL_VideoDevice *OGC_CreateDevice(int devindex)
 		return(0);
 	}
 	SDL_memset(device->hidden, 0, (sizeof *device->hidden));
-
-	videomutex = SDL_CreateMutex();
-	videocond = SDL_CreateCond();
 
 	/* Set the function pointers */
 	device->VideoInit = OGC_VideoInit;
@@ -814,11 +751,13 @@ OGC_InitVideoSystem()
 	VIDEO_Configure(vmode);
 
 	// Allocate the video buffer
-	if (xfb) free(MEM_K1_TO_K0(xfb));
-	xfb = (unsigned char*) MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
+	if (xfb[0]) free(MEM_K1_TO_K0(xfb[0]));
+	if (xfb[1]) free(MEM_K1_TO_K0(xfb[1]));
+	xfb[0] = (unsigned char*) MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
+	xfb[1] = (unsigned char*) MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
 
-	VIDEO_ClearFrameBuffer(vmode, xfb, COLOR_BLACK);
-	VIDEO_SetNextFramebuffer(xfb);
+	VIDEO_ClearFrameBuffer(vmode, xfb[0], COLOR_BLACK);
+	VIDEO_SetNextFramebuffer(xfb[0]);
 
 	// Show the screen.
 	VIDEO_SetBlack(FALSE);
@@ -853,8 +792,8 @@ void OGC_SetWidescreen(int wide)
 
 	VIDEO_Configure (vmode);
 
-	if (xfb)
-		VIDEO_ClearFrameBuffer(vmode, xfb, COLOR_BLACK);
+	if (xfb[0])
+		VIDEO_ClearFrameBuffer(vmode, xfb[0], COLOR_BLACK);
 
 	VIDEO_Flush();
 
