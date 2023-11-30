@@ -71,6 +71,17 @@ static SDL_Rect* modes_descending[] =
 	NULL
 };
 
+typedef struct private_hwdata {
+	void *pixels;
+	void *texture;
+	u32 texture_size;
+	bool texture_is_outdated;
+	/* Number of GX operations that has veen performed on this surface. This
+	 * value can be used to set the Z coordinate for the next operation, as
+	 * well as to decide whether we need to call GX_DrawDone() when the surface
+	 * gets locked. */
+	s16 gx_op_count;
+} OGC_Surface;
 
 /*** 2D Video ***/
 #define HASPECT 			320
@@ -105,10 +116,10 @@ static s16 square[] ATTRIBUTE_ALIGN (32) =
    * X,   Y,  Z
    * Values set are for roughly 4:3 aspect
    */
-	-HASPECT,  VASPECT, 0,	// 0
-	 HASPECT,  VASPECT, 0,	// 1
-	 HASPECT, -VASPECT, 0,	// 2
-	-HASPECT, -VASPECT, 0	// 3
+	0, 0, 0,
+	HASPECT * 2, 0, 0,
+	HASPECT * 2, VASPECT * 2, 0,
+	0, VASPECT * 2, 0,
 };
 
 static const f32 tex_pos[] ATTRIBUTE_ALIGN(32) = {
@@ -120,8 +131,8 @@ static const f32 tex_pos[] ATTRIBUTE_ALIGN(32) = {
 
 static camera cam = {
 	{0.0F, 0.0F, 0.0F},
-	{0.0F, 0.5F, 0.0F},
-	{0.0F, 0.0F, -0.5F}
+	{0.0F, -0.5F, 0.0F},
+	{0.0F, 0.0F, 0.5F}
 };
 
 /****************************************************************************
@@ -140,22 +151,24 @@ draw_init(void *palette, void *tex)
 	GX_SetVtxDesc (GX_VA_POS, GX_DIRECT);
 	GX_SetVtxDesc (GX_VA_TEX0, GX_INDEX8);
 
-	GX_SetVtxAttrFmt (GX_VTXFMT0, GX_VA_POS, GX_POS_XY, GX_S16, 0);
+	GX_SetVtxAttrFmt (GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_S16, 0);
 	GX_SetVtxAttrFmt (GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
 
 	GX_SetArray (GX_VA_TEX0, (void*)tex_pos, 2 * sizeof (f32));
 	GX_SetNumTexGens (1);
-	GX_SetNumChans (0);
+	GX_SetNumChans (1);
+	GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_VTX, GX_SRC_VTX, 0,
+	               GX_DF_NONE, GX_AF_NONE);
 
 	GX_SetTexCoordGen (GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
 
 	GX_SetTevOp (GX_TEVSTAGE0, GX_REPLACE);
-	GX_SetTevOrder (GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
 
 	memset(&view, 0, sizeof (Mtx));
 	guLookAt(view, &cam.pos, &cam.up, &cam.view);
 	guMtxIdentity(m);
-	guMtxTransApply(m, m, 0, 0, -100);
+	guMtxTransApply(m, m, -HASPECT, -VASPECT, 1000);
 	guMtxConcat(view, m, mv);
 	GX_LoadPosMtxImm(mv, GX_PNMTX0);
 
@@ -199,7 +212,7 @@ draw_init(void *palette, void *tex)
 static inline void
 draw_vert (u8 index)
 {
-	GX_Position2s16 (square[index*3],square[index*3+1]);
+	GX_Position3s16 (square[index*3], square[index*3+1], 0);
 	GX_TexCoord1x8 (index);
 }
 
@@ -235,13 +248,138 @@ SetupGX()
 	GX_SetCullMode (GX_CULL_NONE);
 	GX_SetBlendMode(GX_BM_NONE,GX_BL_DSTALPHA,GX_BL_INVSRCALPHA,GX_LO_CLEAR);
 
-	GX_SetZMode (GX_FALSE, GX_LEQUAL, GX_TRUE);
+	GX_SetZMode (GX_TRUE, GX_LEQUAL, GX_TRUE);
 	GX_SetColorUpdate (GX_TRUE);
 	GX_SetAlphaUpdate(GX_FALSE);
 
 	guOrtho(p, VASPECT, -VASPECT, -HASPECT, HASPECT, 100, 1000); // matrix, t, b, l, r, n, f
 	GX_LoadProjectionMtx (p, GX_ORTHOGRAPHIC);
 	GX_Flush();
+}
+
+static u8 texture_format_from_SDL(const SDL_PixelFormat *format)
+{
+	switch (format->BitsPerPixel) {
+	case 8:
+		return GX_TF_CI8;
+	case 16:
+		return GX_TF_RGB565;
+	case 32:
+		return GX_TF_RGBA8;
+	}
+	return 0xff; // invalid
+}
+
+static void pixels_to_texture_16(void *pixels, int16_t pitch, int16_t h,
+                                 void *texture)
+{
+	long long int *dst = texture;
+	long long int *src1 = pixels;
+	long long int *src2 = (long long int *) ((char *)pixels + (pitch * 1));
+	long long int *src3 = (long long int *) ((char *)pixels + (pitch * 2));
+	long long int *src4 = (long long int *) ((char *)pixels + (pitch * 3));
+	int rowpitch = (pitch >> 3) * 3;
+
+	for (int y = 0; y < h; y += 4)
+	{
+		for (int x = 0; x < pitch; x += 8)
+		{
+			*dst++ = *src1++;
+			*dst++ = *src2++;
+			*dst++ = *src3++;
+			*dst++ = *src4++;
+		}
+
+		src1 = src4;
+		src2 += rowpitch;
+		src3 += rowpitch;
+		src4 += rowpitch;
+	}
+}
+
+static void pixels_from_texture_16(void *pixels, int16_t pitch, int16_t h,
+                                   void *texture)
+{
+	long long int *src = texture;
+	long long int *dst1 = pixels;
+	long long int *dst2 = (long long int *) ((char *)pixels + (pitch * 1));
+	long long int *dst3 = (long long int *) ((char *)pixels + (pitch * 2));
+	long long int *dst4 = (long long int *) ((char *)pixels + (pitch * 3));
+	int rowpitch = (pitch >> 3) * 3;
+
+	for (int y = 0; y < h; y += 4)
+	{
+		for (int x = 0; x < pitch; x += 8)
+		{
+			*dst1++ = *src++;
+			*dst2++ = *src++;
+			*dst3++ = *src++;
+			*dst4++ = *src++;
+		}
+
+		dst1 = dst4;
+		dst2 += rowpitch;
+		dst3 += rowpitch;
+		dst4 += rowpitch;
+	}
+}
+
+static void load_surface_texture(const SDL_Surface *surface)
+{
+	GXTexObj texobj_a, texobj_b;
+
+	OGC_Surface *s = surface->hwdata;
+	if (s->texture_is_outdated) {
+		int16_t bytes_pp = surface->format->BytesPerPixel;
+		int16_t bytes_per_pixel = bytes_pp > 2 ? 4 : bytes_pp;
+		int16_t pitch = surface->w * bytes_per_pixel;
+		// TODO: call appropriate function for the surface's bpp
+		pixels_to_texture_16(s->pixels,
+							 pitch, surface->h,
+							 s->texture);
+		s->texture_is_outdated = false;
+		DCStoreRange(s->texture, s->texture_size);
+		GX_InvalidateTexAll();
+	}
+
+	int bpp = surface->format->BitsPerPixel;
+	void *tex = surface->hwdata->texture;
+	if (bpp == 8) {
+		// TODO: handle palette
+#if 0
+		GX_InitTlutObj(&texpalette_a, palette, GX_TL_IA8, 256);
+		GX_InitTlutObj(&texpalette_b, (Uint16*)palette+256, GX_TL_IA8, 256);
+		DCStoreRange(palette, sizeof(512*sizeof(Uint16)));
+		GX_LoadTlut(&texpalette_a, GX_TLUT0);
+		GX_LoadTlut(&texpalette_b, GX_TLUT1);
+#endif
+
+		GX_InitTexObjCI(&texobj_a, tex, surface->w, surface->h, GX_TF_CI8, GX_CLAMP, GX_CLAMP, 0, GX_TLUT0);
+		GX_InitTexObjCI(&texobj_b, tex, surface->w, surface->h, GX_TF_CI8, GX_CLAMP, GX_CLAMP, 0, GX_TLUT1);
+		GX_LoadTexObj(&texobj_b, GX_TEXMAP1);
+
+		// Setup TEV to combine Red+Green and Blue paletted images
+		GX_SetTevColor(GX_TEVREG0, (GXColor){255, 255, 0, 0});
+		GX_SetTevSwapModeTable(GX_TEV_SWAP1, GX_CH_RED, GX_CH_ALPHA, GX_CH_BLUE, GX_CH_ALPHA);
+		GX_SetTevSwapModeTable(GX_TEV_SWAP2, GX_CH_ALPHA, GX_CH_ALPHA, GX_CH_BLUE, GX_CH_ALPHA);
+		// first stage = red and green
+		GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_TEXC, GX_CC_C0, GX_CC_ZERO);
+		// second stage = add blue (and opaque alpha)
+		GX_SetTevOp(GX_TEVSTAGE1, GX_BLEND);
+		GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
+		GX_SetTevSwapMode(GX_TEVSTAGE1, GX_TEV_SWAP0, GX_TEV_SWAP2);
+		GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_TEXC, GX_CC_ZERO, GX_CC_ZERO, GX_CC_CPREV);
+		GX_SetTevAlphaIn(GX_TEVSTAGE1, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+
+		GX_SetNumTevStages(2);
+	} else if (bpp == 16) {
+		GX_InitTexObj(&texobj_a, tex, surface->w, surface->h, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
+	} else {
+		GX_InitTexObj(&texobj_a, tex, surface->w, surface->h, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, GX_FALSE);
+	}
+
+	GX_LoadTexObj(&texobj_a, GX_TEXMAP0);	// load texture object so its ready to use
 }
 
 void OGC_VideoStart(ogcVideo *private)
@@ -295,6 +433,8 @@ static int OGC_VideoInit(_THIS, SDL_PixelFormat *vformat)
 	this->hidden->height = 0;
 	this->hidden->pitch = 0;
 
+	this->info.blit_hw = 1;
+
 	/* We're done! */
 	return 0;
 }
@@ -344,6 +484,9 @@ static SDL_Surface *OGC_SetVideoMode(_THIS, SDL_Surface *current,
 
 	free(this->hidden->buffer);
 	free(this->hidden->texturemem);
+	if (current->hwdata) {
+		SDL_free(current->hwdata);
+	}
 
 	// Allocate the new buffer.
 	this->hidden->buffer = memalign(32, width * height * bytes_per_pixel);
@@ -389,11 +532,16 @@ static SDL_Surface *OGC_SetVideoMode(_THIS, SDL_Surface *current,
 	// Set up the new mode framebuffer
 	current->flags = flags & (SDL_FULLSCREEN | SDL_HWPALETTE | SDL_NOFRAME);
 	// Our surface is always double buffered
-	current->flags |= SDL_PREALLOC | SDL_DOUBLEBUF;
+	current->flags |= SDL_PREALLOC | SDL_DOUBLEBUF | SDL_HWSURFACE;
 	current->w = width;
 	current->h = height;
-	current->pitch = current->w * bytes_per_pixel;
-	current->pixels = this->hidden->buffer;
+	OGC_Surface *s = SDL_malloc(sizeof(OGC_Surface));
+	s->pixels = this->hidden->buffer;
+	s->texture = this->hidden->texturemem;
+	s->texture_size = this->hidden->texturemem_size;
+	s->texture_is_outdated = false;
+	s->gx_op_count = 0;
+	current->hwdata = s;
 
 	/* Set the hidden data */
 	this->hidden->width = current->w;
@@ -414,21 +562,122 @@ static SDL_Surface *OGC_SetVideoMode(_THIS, SDL_Surface *current,
 /* We don't actually allow hardware surfaces other than the main one */
 static int OGC_AllocHWSurface(_THIS, SDL_Surface *surface)
 {
-	return(-1);
+	if (surface->w < 8 || surface->h < 8)
+		return -1;
+
+	int bytes_per_pixel = surface->format->BytesPerPixel;
+
+	OGC_Surface *s = SDL_malloc(sizeof(OGC_Surface));
+	s->pixels = SDL_malloc(surface->h * surface->pitch);
+	u8 texture_format = texture_format_from_SDL(surface->format);
+	s->texture_size = GX_GetTexBufferSize(surface->w, surface->h,
+	                                      texture_format, GX_FALSE, 0);
+	s->texture = memalign(32, s->texture_size);
+	s->texture_is_outdated = false;
+	s->gx_op_count = 0;
+	surface->hwdata = s;
+	surface->flags |= SDL_HWSURFACE | SDL_PREALLOC;
+	surface->pixels = s->pixels;
+	return 0;
+}
+
+static int OGC_HWAccelBlit(SDL_Surface *src, SDL_Rect *srcrect,
+                           SDL_Surface *dst, SDL_Rect *dstrect)
+{
+	// TODO: set u and v to match srcrect
+	load_surface_texture(src);
+
+	dst->hwdata->gx_op_count++;
+	s16 z = -dst->hwdata->gx_op_count;
+
+	GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
+	GX_Position3s16(dstrect->x,
+	                dstrect->y,
+	                z);
+	GX_TexCoord1x8(0);
+	GX_Position3s16(dstrect->x + dstrect->w,
+	                dstrect->y,
+	                z);
+	GX_TexCoord1x8(1);
+	GX_Position3s16(dstrect->x + dstrect->w,
+	                dstrect->y + dstrect->h,
+	                z);
+	GX_TexCoord1x8(2);
+	GX_Position3s16(dstrect->x,
+	                dstrect->y + dstrect->h,
+	                z);
+	GX_TexCoord1x8(3);
+	GX_End();
+
+	return 0;
+}
+
+static int OGC_CheckHWBlit(_THIS, SDL_Surface *src, SDL_Surface *dst)
+{
+	/* For the time being, only accelerate blits to the screen surface */
+	if (dst != SDL_VideoSurface) {
+		return false;
+	}
+
+	src->flags |= SDL_HWACCEL;
+	src->map->hw_blit = OGC_HWAccelBlit;
+	return true;
 }
 
 static void OGC_FreeHWSurface(_THIS, SDL_Surface *surface)
 {
-	return;
+	OGC_Surface *s = surface->hwdata;
+	if (s->pixels) {
+		free(s->pixels);
+	}
+	if (s->texture) {
+		free(s->texture);
+	}
+	SDL_free(s);
+	surface->hwdata = NULL;
 }
 
 static int OGC_LockHWSurface(_THIS, SDL_Surface *surface)
 {
-	return(0);
+	OGC_Surface *s = surface->hwdata;
+	if (s->gx_op_count > 0) {
+		/* Flush the GX drawing done so far */
+		GX_DrawDone();
+
+		uint8_t *texture;
+		texture = s->texture;
+		/* Then copy the EFB onto the surface's texture */
+		GX_SetTexCopySrc(0, 0, surface->w, surface->h);
+		// TODO: use the appropriate format for the screen surface
+		GX_SetTexCopyDst(surface->w, surface->h, GX_TF_RGB565, GX_FALSE);
+		GX_SetCopyFilter (GX_FALSE, NULL, GX_FALSE, NULL);
+		GX_CopyTex(texture, GX_TRUE);
+		GX_PixModeSync(); // TODO: figure out if this is really needed
+		GX_SetDrawDone();
+		DCInvalidateRange(texture, s->texture_size);
+		GX_WaitDrawDone();
+
+		/* Finally, convert the texture data into the surface's pixels
+		 * framebuffer. */
+		// TODO: support other bit depths
+		int16_t bytes_pp = surface->format->BytesPerPixel;
+		int16_t bytes_per_pixel = bytes_pp > 2 ? 4 : bytes_pp;
+		int16_t pitch = surface->w * bytes_per_pixel;
+		pixels_from_texture_16(s->pixels, pitch, surface->h, texture);
+
+		s->gx_op_count = 0;
+	}
+
+	surface->pixels = s->pixels;
+	surface->pitch = surface->w * surface->format->BytesPerPixel;
+	return 0;
 }
 
 static void OGC_UnlockHWSurface(_THIS, SDL_Surface *surface)
 {
+	surface->pixels = NULL;
+	OGC_Surface *s = surface->hwdata;
+	s->texture_is_outdated = true;
 	return;
 }
 
@@ -542,44 +791,24 @@ static void UpdateRect_32(_THIS, SDL_Rect *rect)
 
 static void flipHWSurface_16_16(_THIS, const SDL_Surface* const surface)
 {
-	int h, w;
-	long long int *dst = (long long int *) this->hidden->texturemem;
-	long long int *src1 = (long long int *) this->hidden->buffer;
-	long long int *src2 = (long long int *) (this->hidden->buffer + (this->hidden->pitch * 1));
-	long long int *src3 = (long long int *) (this->hidden->buffer + (this->hidden->pitch * 2));
-	long long int *src4 = (long long int *) (this->hidden->buffer + (this->hidden->pitch * 3));
-	int rowpitch = (this->hidden->pitch >> 3) * 3;
-
-	SDL_mutexP(videomutex);
-	for (h = 0; h < this->hidden->height; h += 4)
-	{
-		for (w = 0; w < this->hidden->pitch; w += 8)
-		{
-			*dst++ = *src1++;
-			*dst++ = *src2++;
-			*dst++ = *src3++;
-			*dst++ = *src4++;
-		}
-
-		src1 = src4;
-		src2 += rowpitch;
-		src3 += rowpitch;
-		src4 += rowpitch;
-	}
-	SDL_CondSignal(videocond);
-	SDL_mutexV(videomutex);
-
+	load_surface_texture(SDL_VideoSurface);
 	draw_square(); // render textured quad
+	SDL_VideoSurface->hwdata->gx_op_count = 0;
+	// TODO: move df to *this
+	int df = 1; // deflicker on/off
+	GX_SetCopyFilter (vmode->aa, vmode->sample_pattern,
+	                  (df == 1) ? GX_TRUE : GX_FALSE, vmode->vfilter);
 	GX_DrawDone();
-
 	GX_InvalidateTexAll();
 
-	fb_index ^= 1;
+	GX_CopyDisp(xfb[fb_index], GX_TRUE);
+	GX_DrawDone();
 
-	GX_CopyDisp(xfb[fb_index], GX_FALSE);
 	VIDEO_SetNextFramebuffer(xfb[fb_index]);
 	VIDEO_Flush();
 	VIDEO_WaitVSync();
+
+	fb_index ^= 1;
 }
 
 static void OGC_UpdateRect(_THIS, SDL_Rect *rect)
@@ -690,11 +919,6 @@ static void OGC_VideoQuit(_THIS)
 
 	VIDEO_SetBlack(TRUE);
 	VIDEO_Flush();
-
-	free(this->hidden->buffer);
-	this->hidden->buffer = NULL;
-	free(this->hidden->texturemem);
-	this->hidden->texturemem = NULL;
 }
 
 static void OGC_DeleteDevice(SDL_VideoDevice *device)
@@ -739,6 +963,7 @@ static SDL_VideoDevice *OGC_CreateDevice(int devindex)
 	device->UpdateRects = OGC_UpdateRects;
 	device->VideoQuit = OGC_VideoQuit;
 	device->AllocHWSurface = OGC_AllocHWSurface;
+	device->CheckHWBlit = OGC_CheckHWBlit;
 	device->LockHWSurface = OGC_LockHWSurface;
 	device->UnlockHWSurface = OGC_UnlockHWSurface;
 	device->FlipHWSurface = OGC_FlipHWSurface;
