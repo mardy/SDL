@@ -135,6 +135,14 @@ static camera cam = {
 	{0.0F, 0.0F, 0.5F}
 };
 
+static struct SDL_PixelFormat OGC_displayformatalphaPixel = {
+	NULL, 32, 4,
+	0, 0, 0, 0,
+	24, 16, 8, 0,
+	0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF,
+	0, 0,
+};
+
 /****************************************************************************
  * Scaler Support Functions
  ***************************************************************************/
@@ -246,7 +254,7 @@ SetupGX()
 	GX_SetPixelFmt (GX_PF_RGB8_Z24, GX_ZC_LINEAR);
 	GX_SetDispCopyGamma (GX_GM_1_0);
 	GX_SetCullMode (GX_CULL_NONE);
-	GX_SetBlendMode(GX_BM_NONE,GX_BL_DSTALPHA,GX_BL_INVSRCALPHA,GX_LO_CLEAR);
+	GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
 
 	GX_SetZMode (GX_TRUE, GX_LEQUAL, GX_TRUE);
 	GX_SetColorUpdate (GX_TRUE);
@@ -268,6 +276,35 @@ static u8 texture_format_from_SDL(const SDL_PixelFormat *format)
 		return GX_TF_RGBA8;
 	}
 	return 0xff; // invalid
+}
+
+static inline void set_pixel_to_texture_32(int x, int y, u32 color, void *texture, int tex_width)
+{
+	u8 *tex = texture;
+	u32 offset;
+
+	offset = (((y >> 2) << 4) * tex_width) + ((x >> 2) << 6) + (((y % 4 << 2) + x % 4) << 1);
+
+	*(tex + offset) = color;
+	*(tex + offset + 1) = color >> 24;
+	*(tex + offset + 32) = color >> 16;
+	*(tex + offset + 33) = color >> 8;
+}
+
+static void pixels_to_texture_32(void *pixels, int16_t w, int16_t h,
+								 int16_t pitch, void *texture)
+{
+	u32 *src = pixels;
+
+	int tex_width = (w + 3) / 4 * 4;
+	for (int y = 0; y < h; y++)
+	{
+		src = (u8*)pixels + pitch * y;
+		for (int x = 0; x < w; x++)
+		{
+			set_pixel_to_texture_32(x, y, *src++, texture, tex_width);
+		}
+	}
 }
 
 static void pixels_to_texture_16(void *pixels, int16_t pitch, int16_t h,
@@ -324,19 +361,35 @@ static void pixels_from_texture_16(void *pixels, int16_t pitch, int16_t h,
 	}
 }
 
+static void pixels_to_texture(void *pixels, uint8_t gx_format,
+							  int16_t w, int16_t h, int16_t pitch, void *texture)
+{
+	switch (gx_format) {
+	case GX_TF_RGB565:
+	case GX_TF_RGB5A3:
+		pixels_to_texture_16(pixels, pitch, h, texture);
+		break;
+	case GX_TF_RGBA8:
+		pixels_to_texture_32(pixels, w, h, pitch, texture);
+		break;
+	default:
+		// TODO support more formats
+	}
+}
+
 static void load_surface_texture(const SDL_Surface *surface)
 {
 	GXTexObj texobj_a, texobj_b;
 
 	OGC_Surface *s = surface->hwdata;
+	uint8_t gx_format = texture_format_from_SDL(surface->format);
 	if (s->texture_is_outdated) {
 		int16_t bytes_pp = surface->format->BytesPerPixel;
 		int16_t bytes_per_pixel = bytes_pp > 2 ? 4 : bytes_pp;
-		int16_t pitch = surface->w * bytes_per_pixel;
-		// TODO: call appropriate function for the surface's bpp
-		pixels_to_texture_16(s->pixels,
-							 pitch, surface->h,
-							 s->texture);
+		int16_t pitch = surface->pitch;
+		pixels_to_texture(s->pixels, gx_format,
+		                  surface->w, surface->h, pitch,
+		                  s->texture);
 		s->texture_is_outdated = false;
 		DCStoreRange(s->texture, s->texture_size);
 		GX_InvalidateTexAll();
@@ -433,7 +486,10 @@ static int OGC_VideoInit(_THIS, SDL_PixelFormat *vformat)
 	this->hidden->height = 0;
 	this->hidden->pitch = 0;
 
+	this->displayformatalphapixel = &OGC_displayformatalphaPixel;
+
 	this->info.blit_hw = 1;
+	this->info.blit_hw_A = 1;
 
 	/* We're done! */
 	return 0;
@@ -564,8 +620,6 @@ static int OGC_AllocHWSurface(_THIS, SDL_Surface *surface)
 {
 	if (surface->w < 8 || surface->h < 8)
 		return -1;
-
-	int bytes_per_pixel = surface->format->BytesPerPixel;
 
 	OGC_Surface *s = SDL_malloc(sizeof(OGC_Surface));
 	if (!s) goto oom_ogc_surface;
