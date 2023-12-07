@@ -549,17 +549,28 @@ static int OGC_AllocHWSurface(_THIS, SDL_Surface *surface)
 	int bytes_per_pixel = surface->format->BytesPerPixel;
 
 	OGC_Surface *s = SDL_malloc(sizeof(OGC_Surface));
+	if (!s) goto oom_ogc_surface;
 	s->pixels = SDL_malloc(surface->h * surface->pitch);
+	if (!s->pixels) goto oom_pixel_buffer;
 	u8 texture_format = texture_format_from_SDL(surface->format);
 	s->texture_size = GX_GetTexBufferSize(surface->w, surface->h,
 	                                      texture_format, GX_FALSE, 0);
 	s->texture = memalign(32, s->texture_size);
+	if (!s->texture) goto oom_texture;
 	s->texture_is_outdated = false;
 	s->gx_op_count = 0;
 	surface->hwdata = s;
 	surface->flags |= SDL_HWSURFACE | SDL_PREALLOC;
 	surface->pixels = NULL;
 	return 0;
+
+oom_texture:
+	SDL_free(s->pixels);
+oom_pixel_buffer:
+	SDL_free(s);
+oom_ogc_surface:
+	SDL_OutOfMemory();
+	return -1;
 }
 
 static int OGC_HWAccelBlit(SDL_Surface *src, SDL_Rect *srcrect,
