@@ -558,7 +558,7 @@ static int OGC_AllocHWSurface(_THIS, SDL_Surface *surface)
 	s->gx_op_count = 0;
 	surface->hwdata = s;
 	surface->flags |= SDL_HWSURFACE | SDL_PREALLOC;
-	surface->pixels = s->pixels;
+	surface->pixels = NULL;
 	return 0;
 }
 
