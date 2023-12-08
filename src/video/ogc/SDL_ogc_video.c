@@ -215,20 +215,20 @@ draw_init(void *palette, void *tex)
 }
 
 static inline void
-draw_vert (u8 index)
+draw_vert(u8 index, s16 z)
 {
-	GX_Position3s16 (square[index*3], square[index*3+1], 0);
+	GX_Position3s16 (square[index*3], square[index*3+1], z);
 	GX_TexCoord1x8 (index);
 }
 
 static inline void
-draw_square ()
+draw_square(s16 z)
 {
 	GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
-	draw_vert(0);
-	draw_vert(1);
-	draw_vert(2);
-	draw_vert(3);
+	draw_vert(0, z);
+	draw_vert(1, z);
+	draw_vert(2, z);
+	draw_vert(3, z);
 	GX_End();
 }
 
@@ -433,6 +433,22 @@ static void load_surface_texture(const SDL_Surface *surface)
 	GX_LoadTexObj(&texobj_a, GX_TEXMAP0);	// load texture object so its ready to use
 }
 
+static void draw_screen_surface()
+{
+	load_surface_texture(SDL_VideoSurface);
+	s16 z = -SDL_VideoSurface->hwdata->gx_op_count - 1;
+	draw_square(z); // render textured quad
+	SDL_VideoSurface->hwdata->gx_op_count = 0;
+}
+
+static inline void ensure_screen_ready_for_hw_op()
+{
+	OGC_Surface *s = SDL_VideoSurface->hwdata;
+	if (s->texture_is_outdated) {
+		draw_screen_surface();
+	}
+}
+
 void OGC_VideoStart(ogcVideo *private)
 {
 	if (private==NULL) {
@@ -473,6 +489,7 @@ static int OGC_VideoInit(_THIS, SDL_PixelFormat *vformat)
 
 	this->displayformatalphapixel = &OGC_displayformatalphaPixel;
 
+	this->info.blit_fill = 1;
 	this->info.blit_hw = 1;
 	this->info.blit_hw_A = 1;
 
@@ -631,6 +648,8 @@ oom_ogc_surface:
 static int OGC_HWAccelBlit(SDL_Surface *src, SDL_Rect *srcrect,
                            SDL_Surface *dst, SDL_Rect *dstrect)
 {
+	ensure_screen_ready_for_hw_op();
+
 	// TODO: set u and v to match srcrect
 	load_surface_texture(src);
 
@@ -669,6 +688,61 @@ static int OGC_CheckHWBlit(_THIS, SDL_Surface *src, SDL_Surface *dst)
 	src->flags |= SDL_HWACCEL;
 	src->map->hw_blit = OGC_HWAccelBlit;
 	return true;
+}
+
+static int OGC_FillHWRect(_THIS, SDL_Surface *dst, SDL_Rect *rect,
+                          Uint32 color)
+{
+	if (dst != SDL_VideoSurface) {
+		/* Perform a software fill. Reinvoke SDL_FillRect() in this way is
+		 * rather hacky, but it works. */
+
+		this->info.blit_fill = 0;
+		SDL_FillRect(dst, rect, color);
+		this->info.blit_fill = 1;
+		return 0;
+	}
+
+	ensure_screen_ready_for_hw_op();
+
+	/* SDL tries to be helpful in passing us the color formatted according to
+	 * the surface, but for us it's easier to work with the decomposed values
+	 */
+	u8 r, g, b;
+	SDL_GetRGB(color, dst->format, &r, &g, &b);
+
+	GX_SetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
+
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_S16, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_CLR0, GX_CLR_RGB, GX_RGB8, 0);
+
+	dst->hwdata->gx_op_count++;
+	s16 z = -dst->hwdata->gx_op_count;
+
+	GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
+	GX_Position3s16(rect->x, rect->y, z);
+	GX_Color3u8(r, g, b);
+	GX_Position3s16(rect->x + rect->w, rect->y, z);
+	GX_Color3u8(r, g, b);
+	GX_Position3s16(rect->x + rect->w, rect->y + rect->h, z);
+	GX_Color3u8(r, g, b);
+	GX_Position3s16(rect->x, rect->y + rect->h, z);
+	GX_Color3u8(r, g, b);
+	GX_End();
+
+	/* Restore stuff as it was. TODO: make a function, or move it somewhere
+	 * else (before blitting a texture; that could save some cycles) */
+	GX_SetTevOp(GX_TEVSTAGE0, GX_REPLACE);
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_INDEX8);
+
+	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_S16, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
+	return 0;
 }
 
 static void OGC_FreeHWSurface(_THIS, SDL_Surface *surface)
@@ -839,9 +913,8 @@ static void UpdateRect_32(_THIS, SDL_Rect *rect)
 
 static void flipHWSurface_16_16(_THIS, const SDL_Surface* const surface)
 {
-	load_surface_texture(SDL_VideoSurface);
-	draw_square(); // render textured quad
-	SDL_VideoSurface->hwdata->gx_op_count = 0;
+	draw_screen_surface();
+
 	// TODO: move df to *this
 	int df = 1; // deflicker on/off
 	GX_SetCopyFilter (vmode->aa, vmode->sample_pattern,
@@ -999,6 +1072,7 @@ static SDL_VideoDevice *OGC_CreateDevice(int devindex)
 	device->VideoQuit = OGC_VideoQuit;
 	device->AllocHWSurface = OGC_AllocHWSurface;
 	device->CheckHWBlit = OGC_CheckHWBlit;
+	device->FillHWRect = OGC_FillHWRect;
 	device->LockHWSurface = OGC_LockHWSurface;
 	device->UnlockHWSurface = OGC_UnlockHWSurface;
 	device->FlipHWSurface = OGC_FlipHWSurface;
