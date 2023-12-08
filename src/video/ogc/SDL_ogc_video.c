@@ -429,6 +429,7 @@ static void load_surface_texture(const SDL_Surface *surface)
 		GX_InitTexObj(&texobj_a, tex, surface->w, surface->h, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, GX_FALSE);
 	}
 
+	GX_InitTexObjLOD(&texobj_a, GX_NEAR, GX_NEAR, 0.0f, 0.0f, 0.0f, 0, 0, GX_ANISO_1);
 	GX_LoadTexObj(&texobj_a, GX_TEXMAP0);	// load texture object so its ready to use
 }
 
