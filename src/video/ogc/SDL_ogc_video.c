@@ -641,6 +641,7 @@ static int OGC_LockHWSurface(_THIS, SDL_Surface *surface)
 {
 	OGC_Surface *s = surface->hwdata;
 	if (s->gx_op_count > 0) {
+		if (surface != SDL_VideoSurface) exit(0);
 		/* Flush the GX drawing done so far */
 		GX_DrawDone();
 
