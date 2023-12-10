@@ -438,9 +438,11 @@ static void load_surface_texture(const SDL_Surface *surface)
 
 static void draw_screen_surface()
 {
-	load_surface_texture(SDL_VideoSurface);
-	s16 z = -SDL_VideoSurface->hwdata->gx_op_count - 1;
-	draw_square(z); // render textured quad
+	if (SDL_VideoSurface->hwdata->texture_is_outdated) {
+		load_surface_texture(SDL_VideoSurface);
+		s16 z = -SDL_VideoSurface->hwdata->gx_op_count - 1;
+		draw_square(z); // render textured quad
+	}
 	SDL_VideoSurface->hwdata->gx_op_count = 0;
 }
 
