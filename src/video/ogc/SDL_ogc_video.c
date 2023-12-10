@@ -92,6 +92,7 @@ int fb_index = 0;
 GXRModeObj* vmode = 0;
 static GXTexObj texobj_a, texobj_b;
 static GXTlutObj texpalette_a, texpalette_b;
+static bool debug_accel = false;
 
 /*** GX ***/
 #define DEFAULT_FIFO_SIZE 256 * 1024
@@ -677,11 +678,16 @@ static int OGC_HWAccelBlit(SDL_Surface *src, SDL_Rect *srcrect,
 	dst->hwdata->gx_op_count++;
 	s16 z = -dst->hwdata->gx_op_count;
 
-	GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
-	GX_Position3s16(dstrect->x,
-	                dstrect->y,
-	                z);
-	GX_TexCoord1x8(0);
+	if (debug_accel) {
+		// Draw only half the square
+		GX_Begin(GX_TRIANGLES, GX_VTXFMT0, 3);
+	} else {
+		GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
+		GX_Position3s16(dstrect->x,
+		                dstrect->y,
+		                z);
+		GX_TexCoord1x8(0);
+	}
 	GX_Position3s16(dstrect->x + dstrect->w,
 	                dstrect->y,
 	                z);
@@ -747,9 +753,14 @@ static int OGC_FillHWRect(_THIS, SDL_Surface *dst, SDL_Rect *rect,
 	dst->hwdata->gx_op_count++;
 	s16 z = -dst->hwdata->gx_op_count;
 
-	GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
-	GX_Position3s16(rect->x, rect->y, z);
-	GX_Color3u8(r, g, b);
+	if (debug_accel) {
+		// Draw only half the square
+		GX_Begin(GX_TRIANGLES, GX_VTXFMT0, 3);
+	} else {
+		GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
+		GX_Position3s16(rect->x, rect->y, z);
+		GX_Color3u8(r, g, b);
+	}
 	GX_Position3s16(rect->x + rect->w, rect->y, z);
 	GX_Color3u8(r, g, b);
 	GX_Position3s16(rect->x + rect->w, rect->y + rect->h, z);
@@ -1153,6 +1164,10 @@ OGC_InitVideoSystem()
 		vmode = &TVPal576IntDfScale;
 
 	VIDEO_Configure(vmode);
+
+	if (SDL_getenv("SDL_OGC_DEBUG_ACCEL")) {
+		debug_accel = true;
+	}
 
 	// Allocate the video buffer
 	if (xfb[0]) free(MEM_K1_TO_K0(xfb[0]));
