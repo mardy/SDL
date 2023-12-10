@@ -696,6 +696,10 @@ static int OGC_HWAccelBlit(SDL_Surface *src, SDL_Rect *srcrect,
 	GX_TexCoord1x8(3);
 	GX_End();
 
+	/* It's not clear why we need this, but without it some textures appear
+	 * corrupted, when there are no calls to SDL_LockSurface/SDL_UnlockSurface.
+	 */
+	GX_DrawDone();
 	return 0;
 }
 
