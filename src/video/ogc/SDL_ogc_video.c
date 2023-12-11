@@ -90,6 +90,7 @@ GXRModeObj* vmode = 0;
 static GXTexObj texobj_a, texobj_b;
 static GXTlutObj texpalette_a, texpalette_b;
 static bool debug_accel = false;
+static bool disable_accel = false;
 
 /*** GX ***/
 #define DEFAULT_FIFO_SIZE 256 * 1024
@@ -571,9 +572,11 @@ static int OGC_VideoInit(_THIS, SDL_PixelFormat *vformat)
 
 	this->displayformatalphapixel = &OGC_displayformatalphaPixel;
 
-	this->info.blit_fill = 1;
-	this->info.blit_hw = 1;
-	this->info.blit_hw_A = 1;
+	if (!disable_accel) {
+		this->info.blit_fill = 1;
+		this->info.blit_hw = 1;
+		this->info.blit_hw_A = 1;
+	}
 
 	/* We're done! */
 	return 0;
@@ -1178,7 +1181,9 @@ OGC_InitVideoSystem()
 
 	VIDEO_Configure(vmode);
 
-	if (SDL_getenv("SDL_OGC_DEBUG_ACCEL")) {
+	if (SDL_getenv("SDL_OGC_DISABLE_ACCEL")) {
+		disable_accel = true;
+	} else if (SDL_getenv("SDL_OGC_DEBUG_ACCEL")) {
 		debug_accel = true;
 	}
 
