@@ -289,15 +289,28 @@ static inline void set_pixel_to_texture_32(int x, int y, u32 color, void *textur
 	*(tex + offset + 33) = color >> 8;
 }
 
-static void pixels_to_texture_32(void *pixels, int16_t w, int16_t h,
-								 int16_t pitch, void *texture)
+static inline u32 get_pixel_from_texture_32(int x, int y, void *texture, int tex_width)
+{
+	u8 *tex = texture;
+	u32 offset;
+
+	offset = (((y >> 2) << 4) * tex_width) + ((x >> 2) << 6) + (((y % 4 << 2) + x % 4) << 1);
+
+	return *(tex + offset) |
+	       *(tex + offset + 1) << 24 |
+	       *(tex + offset + 32) << 16 |
+	       *(tex + offset + 33) << 8;
+}
+
+static void pixels_RGBA_to_texture(void *pixels, int16_t w, int16_t h,
+                                   int16_t pitch, void *texture)
 {
 	u32 *src = pixels;
 
 	int tex_width = (w + 3) / 4 * 4;
 	for (int y = 0; y < h; y++)
 	{
-		src = (u8*)pixels + pitch * y;
+		src = (u32*)((u8*)pixels + pitch * y);
 		for (int x = 0; x < w; x++)
 		{
 			set_pixel_to_texture_32(x, y, *src++, texture, tex_width);
@@ -305,7 +318,55 @@ static void pixels_to_texture_32(void *pixels, int16_t w, int16_t h,
 	}
 }
 
-static void pixels_to_texture_16(void *pixels, int16_t pitch, int16_t h,
+static void pixels_RGBA_from_texture(void *pixels, int16_t w, int16_t h,
+                                     int16_t pitch, void *texture)
+{
+	u32 *dst = pixels;
+
+	int tex_width = (w + 3) / 4 * 4;
+	for (int y = 0; y < h; y++)
+	{
+		dst = (u32*)((u8*)pixels + pitch * y);
+		for (int x = 0; x < w; x++)
+		{
+			*dst++ = get_pixel_from_texture_32(x, y, texture, tex_width);
+		}
+	}
+}
+
+static void pixels_XRGB_to_texture(void *pixels, int16_t w, int16_t h,
+                                   int16_t pitch, void *texture)
+{
+	u32 *src = pixels;
+
+	int tex_width = (w + 3) / 4 * 4;
+	for (int y = 0; y < h; y++)
+	{
+		src = (u32*)((u8*)pixels + pitch * y);
+		for (int x = 0; x < w; x++)
+		{
+			set_pixel_to_texture_32(x, y, (*src++) << 8 | 0xff, texture, tex_width);
+		}
+	}
+}
+
+static void pixels_XRGB_from_texture(void *pixels, int16_t w, int16_t h,
+                                     int16_t pitch, void *texture)
+{
+	u32 *dst = pixels;
+
+	int tex_width = (w + 3) / 4 * 4;
+	for (int y = 0; y < h; y++)
+	{
+		dst = (u32*)((u8*)pixels + pitch * y);
+		for (int x = 0; x < w; x++)
+		{
+			*dst++ = get_pixel_from_texture_32(x, y, texture, tex_width) >> 8;
+		}
+	}
+}
+
+static void pixels_16_to_texture(void *pixels, int16_t pitch, int16_t h,
                                  void *texture)
 {
 	long long int *dst = texture;
@@ -332,7 +393,7 @@ static void pixels_to_texture_16(void *pixels, int16_t pitch, int16_t h,
 	}
 }
 
-static void pixels_from_texture_16(void *pixels, int16_t pitch, int16_t h,
+static void pixels_16_from_texture(void *pixels, int16_t pitch, int16_t h,
                                    void *texture)
 {
 	long long int *src = texture;
@@ -359,16 +420,38 @@ static void pixels_from_texture_16(void *pixels, int16_t pitch, int16_t h,
 	}
 }
 
-static void pixels_to_texture(void *pixels, uint8_t gx_format,
-							  int16_t w, int16_t h, int16_t pitch, void *texture)
+static void pixels_to_texture(void *pixels, const SDL_PixelFormat *format,
+                              int16_t w, int16_t h, int16_t pitch, void *texture)
 {
-	switch (gx_format) {
-	case GX_TF_RGB565:
-	case GX_TF_RGB5A3:
-		pixels_to_texture_16(pixels, pitch, h, texture);
+	switch (format->BytesPerPixel) {
+	case 2:
+		pixels_16_to_texture(pixels, pitch, h, texture);
 		break;
-	case GX_TF_RGBA8:
-		pixels_to_texture_32(pixels, w, h, pitch, texture);
+	case 4:
+		if (format->Amask) {
+			pixels_RGBA_to_texture(pixels, w, h, pitch, texture);
+		} else {
+			pixels_XRGB_to_texture(pixels, w, h, pitch, texture);
+		}
+		break;
+	default:
+		// TODO support more formats
+	}
+}
+
+static void pixels_from_texture(void *pixels, const SDL_PixelFormat *format,
+                                int16_t w, int16_t h, int16_t pitch, void *texture)
+{
+	switch (format->BytesPerPixel) {
+	case 2:
+		pixels_16_from_texture(pixels, pitch, h, texture);
+		break;
+	case 4:
+		if (format->Amask) {
+			pixels_RGBA_from_texture(pixels, w, h, pitch, texture);
+		} else {
+			pixels_XRGB_from_texture(pixels, w, h, pitch, texture);
+		}
 		break;
 	default:
 		// TODO support more formats
@@ -380,13 +463,9 @@ static void load_surface_texture(const SDL_Surface *surface)
 	GXTexObj texobj_a, texobj_b;
 
 	OGC_Surface *s = surface->hwdata;
-	uint8_t gx_format = texture_format_from_SDL(surface->format);
 	if (s->texture_is_outdated) {
-		int16_t bytes_pp = surface->format->BytesPerPixel;
-		int16_t bytes_per_pixel = bytes_pp > 2 ? 4 : bytes_pp;
-		int16_t pitch = surface->pitch;
-		pixels_to_texture(s->pixels, gx_format,
-		                  surface->w, surface->h, pitch,
+		pixels_to_texture(s->pixels, surface->format,
+		                  surface->w, surface->h, surface->pitch,
 		                  s->texture);
 		s->texture_is_outdated = false;
 		DCStoreRange(s->texture, s->texture_size);
@@ -783,26 +862,24 @@ static int OGC_LockHWSurface(_THIS, SDL_Surface *surface)
 		/* Flush the GX drawing done so far */
 		GX_DrawDone();
 
-		uint8_t *texture;
-		texture = s->texture;
 		/* Then copy the EFB onto the surface's texture */
 		GX_SetTexCopySrc(0, 0, surface->w, surface->h);
-		// TODO: use the appropriate format for the screen surface
-		GX_SetTexCopyDst(surface->w, surface->h, GX_TF_RGB565, GX_FALSE);
+		uint8_t gx_format = texture_format_from_SDL(surface->format);
+		GX_SetTexCopyDst(surface->w, surface->h, gx_format, GX_FALSE);
 		GX_SetCopyFilter (GX_FALSE, NULL, GX_FALSE, NULL);
-		GX_CopyTex(texture, GX_TRUE);
+		GX_CopyTex(s->texture, GX_TRUE);
 		GX_PixModeSync(); // TODO: figure out if this is really needed
 		GX_SetDrawDone();
-		DCInvalidateRange(texture, s->texture_size);
+		DCInvalidateRange(s->texture, s->texture_size);
 		GX_WaitDrawDone();
 
 		/* Finally, convert the texture data into the surface's pixels
 		 * framebuffer. */
-		// TODO: support other bit depths
 		int16_t bytes_pp = surface->format->BytesPerPixel;
 		int16_t bytes_per_pixel = bytes_pp > 2 ? 4 : bytes_pp;
 		int16_t pitch = surface->w * bytes_per_pixel;
-		pixels_from_texture_16(s->pixels, pitch, surface->h, texture);
+		pixels_from_texture(s->pixels, surface->format,
+		                    surface->w, surface->h, pitch, s->texture);
 
 		s->gx_op_count = 0;
 	}
@@ -928,7 +1005,7 @@ static void UpdateRect_32(_THIS, SDL_Rect *rect)
 	}
 }
 
-static void flipHWSurface_16_16(_THIS, const SDL_Surface* const surface)
+static int OGC_FlipHWSurface(_THIS, SDL_Surface *surface)
 {
 	draw_screen_surface();
 
@@ -947,6 +1024,7 @@ static void flipHWSurface_16_16(_THIS, const SDL_Surface* const surface)
 	VIDEO_WaitVSync();
 
 	fb_index ^= 1;
+	return 0;
 }
 
 static void OGC_UpdateRect(_THIS, SDL_Rect *rect)
@@ -985,39 +1063,6 @@ static void OGC_UpdateRects(_THIS, int numrects, SDL_Rect *rects)
 	}
 
 	SDL_CondSignal(videocond);
-}
-
-static void flipHWSurface_24_16(_THIS, SDL_Surface *surface)
-{
-	SDL_Rect screen_rect = {0, 0, this->hidden->width, this->hidden->height};
-	OGC_UpdateRects(this, 1, &screen_rect);
-}
-
-static void flipHWSurface_32_16(_THIS, SDL_Surface *surface)
-{
-	SDL_Rect screen_rect = {0, 0, this->hidden->width, this->hidden->height};
-	OGC_UpdateRects(this, 1, &screen_rect);
-}
-
-static int OGC_FlipHWSurface(_THIS, SDL_Surface *surface)
-{
-	switch(surface->format->BytesPerPixel)
-	{
-		case 1:
-		case 2:
-			// 8 and 16 bit use the same tile format
-			flipHWSurface_16_16(this, surface);
-			break;
-		case 3:
-			flipHWSurface_24_16(this, surface);
-			break;
-		case 4:
-			flipHWSurface_32_16(this, surface);
-			break;
-		default:
-			return -1;
-	}
-	return 0;
 }
 
 static int OGC_SetColors(_THIS, int first_color, int color_count, SDL_Color *colors)
