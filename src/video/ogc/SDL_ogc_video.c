@@ -274,6 +274,7 @@ static u8 texture_format_from_SDL(const SDL_PixelFormat *format)
 		return GX_TF_CI8;
 	case 16:
 		return GX_TF_RGB565;
+	case 24:
 	case 32:
 		return GX_TF_RGBA8;
 	}
@@ -370,6 +371,45 @@ static void pixels_XRGB_from_texture(void *pixels, int16_t w, int16_t h,
 	}
 }
 
+static void pixels_RGB_to_texture(void *pixels, int16_t w, int16_t h,
+                                  int16_t pitch, void *texture)
+{
+	u8 *src = pixels;
+
+	int tex_width = (w + 3) / 4 * 4;
+	for (int y = 0; y < h; y++)
+	{
+		src = (u8*)pixels + pitch * y;
+		for (int x = 0; x < w; x++)
+		{
+			u8 r = *src++;
+			u8 g = *src++;
+			u8 b = *src++;
+			set_pixel_to_texture_32(x, y, r << 24 | g << 16 | b << 8 | 0xff,
+			                        texture, tex_width);
+		}
+	}
+}
+
+static void pixels_RGB_from_texture(void *pixels, int16_t w, int16_t h,
+                                    int16_t pitch, void *texture)
+{
+	u8 *dst = pixels;
+
+	int tex_width = (w + 3) / 4 * 4;
+	for (int y = 0; y < h; y++)
+	{
+		dst = (u8*)pixels + pitch * y;
+		for (int x = 0; x < w; x++)
+		{
+			u32 color = get_pixel_from_texture_32(x, y, texture, tex_width);
+			*dst++ = color >> 24;
+			*dst++ = color >> 16;
+			*dst++ = color >> 8;
+		}
+	}
+}
+
 static void pixels_16_to_texture(void *pixels, int16_t pitch, int16_t h,
                                  void *texture)
 {
@@ -431,6 +471,9 @@ static void pixels_to_texture(void *pixels, const SDL_PixelFormat *format,
 	case 2:
 		pixels_16_to_texture(pixels, pitch, h, texture);
 		break;
+	case 3:
+		pixels_RGB_to_texture(pixels, w, h, pitch, texture);
+		break;
 	case 4:
 		if (format->Amask) {
 			pixels_RGBA_to_texture(pixels, w, h, pitch, texture);
@@ -449,6 +492,9 @@ static void pixels_from_texture(void *pixels, const SDL_PixelFormat *format,
 	switch (format->BytesPerPixel) {
 	case 2:
 		pixels_16_from_texture(pixels, pitch, h, texture);
+		break;
+	case 3:
+		pixels_RGB_from_texture(pixels, w, h, pitch, texture);
 		break;
 	case 4:
 		if (format->Amask) {
@@ -897,9 +943,7 @@ static int OGC_LockHWSurface(_THIS, SDL_Surface *surface)
 
 		/* Finally, convert the texture data into the surface's pixels
 		 * framebuffer. */
-		int16_t bytes_pp = surface->format->BytesPerPixel;
-		int16_t bytes_per_pixel = bytes_pp > 2 ? 4 : bytes_pp;
-		int16_t pitch = surface->w * bytes_per_pixel;
+		int16_t pitch = surface->w * surface->format->BytesPerPixel;
 		pixels_from_texture(s->pixels, surface->format,
 		                    surface->w, surface->h, pitch, s->texture);
 
