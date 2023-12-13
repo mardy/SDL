@@ -761,10 +761,15 @@ static SDL_Surface *OGC_SetVideoMode(_THIS, SDL_Surface *current,
 	SDL_memset(this->hidden->buffer, 0, width * height * bytes_per_pixel);
 	SDL_memset(this->hidden->texturemem, 0, this->hidden->texturemem_size);
 
+	/* Set the hidden data */
+	this->hidden->width = width;
+	this->hidden->height = height;
+	this->hidden->pitch = width * (bytes_per_pixel > 2 ? 4 : bytes_per_pixel);
+
 	// Set up the new mode framebuffer
-	current->flags = flags & (SDL_FULLSCREEN | SDL_HWPALETTE | SDL_NOFRAME);
+	current->flags = flags & (SDL_FULLSCREEN | SDL_HWPALETTE | SDL_NOFRAME | SDL_HWSURFACE);
 	// Our surface is always double buffered
-	current->flags |= SDL_PREALLOC | SDL_DOUBLEBUF | SDL_HWSURFACE;
+	current->flags |= SDL_PREALLOC | SDL_DOUBLEBUF;
 	current->w = width;
 	current->h = height;
 	OGC_Surface *s = SDL_malloc(sizeof(OGC_Surface));
@@ -774,11 +779,11 @@ static SDL_Surface *OGC_SetVideoMode(_THIS, SDL_Surface *current,
 	s->texture_is_outdated = false;
 	s->gx_op_count = 0;
 	current->hwdata = s;
-
-	/* Set the hidden data */
-	this->hidden->width = current->w;
-	this->hidden->height = current->h;
-	this->hidden->pitch = current->w * (bytes_per_pixel > 2 ? 4 : bytes_per_pixel);
+	if (!(current->flags & SDL_HWSURFACE)) {
+		/* Expose the surface pixels */
+		current->pixels = s->pixels;
+		current->pitch = this->hidden->pitch;
+	}
 
 	currentwidth = current->w;
 	currentheight = current->h;
@@ -990,115 +995,7 @@ static void OGC_UnlockHWSurface(_THIS, SDL_Surface *surface)
 	return;
 }
 
-static inline void Set_RGBAPixel(_THIS, int x, int y, u32 color)
-{
-	u8 *truc = this->hidden->texturemem;
-	int width = this->hidden->width;
-	u32 offset;
-
-	offset = (((y >> 2) << 4) * width) + ((x >> 2) << 6) + ((((y & 3) << 2) + (x & 3)) << 1);
-
-	*(truc + offset) = color;
-	*(truc + offset + 1) = color >> 24;
-	*(truc + offset + 32) = color >> 16;
-	*(truc + offset + 33) = color >> 8;
-}
-
-static inline void Set_RGB565Pixel(_THIS, int x, int y, u16 color)
-{
-	u8 *truc = this->hidden->texturemem;
-	int width = this->hidden->width;
-	u32 offset;
-
-	offset = (((y >> 2) << 3) * width) + ((x >> 2) << 5) + ((((y & 3) << 2) + (x & 3)) << 1);
-
-	*(truc + offset) = color >> 8;
-	*(truc + offset + 1) = color;
-}
-
-static inline void Set_PalPixel(_THIS, int x, int y, u8 color)
-{
-	u8 *truc = this->hidden->texturemem;
-	int width = this->hidden->pitch;
-	u32 offset;
-
-	offset = ((y & ~3) * width) + ((x & ~7) << 2) + ((y & 3) << 3) + (x & 7);
-
-	truc[offset] = color;
-}
-
-static void UpdateRect_8(_THIS, SDL_Rect *rect)
-{
-	u8 *src;
-	u8 color;
-	int i, j;
-
-	for (i = 0; i < rect->h; i++)
-	{
-		src = (this->hidden->buffer + (this->hidden->width * (i + rect->y)) + rect->x);
-		for (j = 0; j < rect->w; j++)
-		{
-			color = src[j];
-			Set_PalPixel(this, rect->x + j, rect->y + i, color);
-		}
-	}
-}
-
-static void UpdateRect_16(_THIS, SDL_Rect *rect)
-{
-	u8 *src;
-	u8 *ptr;
-	u16 color;
-	int i, j;
-	for (i = 0; i < rect->h; i++)
-	{
-		src = (this->hidden->buffer + (this->hidden->width * 2 * (i + rect->y)) + (rect->x * 2));
-		for (j = 0; j < rect->w; j++)
-		{
-			ptr = src + (j * 2);
-			color = (ptr[0] << 8) | ptr[1];
-			Set_RGB565Pixel(this, rect->x + j, rect->y + i, color);
-		}
-	}
-}
-
-static void UpdateRect_24(_THIS, SDL_Rect *rect)
-{
-	u8 *src;
-	u8 *ptr;
-	u32 color;
-	int i, j;
-	for (i = 0; i < rect->h; i++)
-	{
-		src = (this->hidden->buffer + (this->hidden->width * 3 * (i + rect->y)) + (rect->x * 3));
-		for (j = 0; j < rect->w; j++)
-		{
-			ptr = src + (j * 3);
-			color = (ptr[0] << 24) | (ptr[1] << 16) | (ptr[2] << 8) | 0xff;
-			Set_RGBAPixel(this, rect->x + j, rect->y + i, color);
-		}
-	}
-}
-
-static void UpdateRect_32(_THIS, SDL_Rect *rect)
-{
-	u8 *src;
-	u8 *ptr;
-	u32 color;
-	int i, j;
-	for (i = 0; i < rect->h; i++)
-	{
-		src = (this->hidden->buffer + (this->hidden->width * 4 * (i + rect->y)) + (rect->x * 4));
-		for (j = 0; j < rect->w; j++)
-		{
-			ptr = src + (j * 4);
-			color = (ptr[1] << 24) | (ptr[2] << 16) | (ptr[3] << 8) | ptr[0];
-			Set_RGBAPixel(this, rect->x + j, rect->y + i, color);
-		}
-	}
-}
-
-static int OGC_FlipHWSurface(_THIS, SDL_Surface *surface)
+static void show_screen(SDL_Surface *surface)
 {
 	draw_screen_surface();
 
@@ -1111,6 +1008,11 @@ static int OGC_FlipHWSurface(_THIS, SDL_Surface *surface)
 
 	GX_CopyDisp(xfb[fb_index], GX_TRUE);
 	GX_DrawDone();
+}
+
+static int OGC_FlipHWSurface(_THIS, SDL_Surface *surface)
+{
+	show_screen(surface);
 
 	VIDEO_SetNextFramebuffer(xfb[fb_index]);
 	VIDEO_Flush();
@@ -1120,42 +1022,22 @@ static int OGC_FlipHWSurface(_THIS, SDL_Surface *surface)
 	return 0;
 }
 
-static void OGC_UpdateRect(_THIS, SDL_Rect *rect)
-{
-	const SDL_Surface* const screen = this->screen;
-
-	switch(screen->format->BytesPerPixel) {
-	case 1:
-		UpdateRect_8(this, rect);
-		break;
-	case 2:
-		UpdateRect_16(this, rect);
-		break;
-	case 3:
-		UpdateRect_24(this, rect);
-		break;
-	case 4:
-		UpdateRect_32(this, rect);
-		break;
-	default:
-		fprintf(stderr, "Invalid BPP %d\n", screen->format->BytesPerPixel);
-		break;
-	}
-}
-
 static void OGC_UpdateRects(_THIS, int numrects, SDL_Rect *rects)
 {
-	int i;
-
-	// note that this function doesn't lock - we don't care if this isn't
-	// rendered now, that's what Flip is for
-
-	for (i = 0; i < numrects; i++)
-	{
-		OGC_UpdateRect(this, rects+i);
+	SDL_Surface *screen = this->screen;
+	/* This method can get called before a video mode is set, by SDL_DrawCursor */
+	if (!screen || !screen->hwdata) {
+		return;
 	}
 
-	SDL_CondSignal(videocond);
+	/* For software surfaces we don't get a call to LockHWSurface(), therefore
+	 * we must assume that the surface is always dirty. */
+	if (!(screen->flags & SDL_HWSURFACE)) {
+		screen->hwdata->texture_is_outdated = true;
+	}
+	show_screen(screen);
+
+	VIDEO_Flush();
 }
 
 static int OGC_SetColors(_THIS, int first_color, int color_count, SDL_Color *colors)
