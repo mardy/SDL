@@ -461,10 +461,65 @@ static void pixels_16_from_texture(void *pixels, int16_t pitch, int16_t h,
 	}
 }
 
+static inline void set_pixel_8_to_texture(int x, int y, u8 color, void *texture, int tex_width)
+{
+	u8 *tex = texture;
+	u32 offset;
+
+	offset = ((y & ~3) * tex_width) + ((x & ~7) << 2) + ((y & 3) << 3) + (x & 7);
+
+	tex[offset] = color;
+}
+
+static inline u8 get_pixel_8_from_texture(int x, int y, void *texture, int tex_width)
+{
+	u8 *tex = texture;
+	u32 offset;
+
+	offset = ((y & ~3) * tex_width) + ((x & ~7) << 2) + ((y & 3) << 3) + (x & 7);
+
+	return tex[offset];
+}
+
+static void pixels_8_to_texture(void *pixels, int16_t w, int16_t h,
+                                int16_t pitch, void *texture)
+{
+	u8 *src = pixels;
+	int tex_width = (w + 7) / 8 * 8;
+
+	for (int y = 0; y < h; y++)
+	{
+		src = (u8*)pixels + pitch * y;
+		for (int x = 0; x < w; x ++)
+		{
+			set_pixel_8_to_texture(x, y, *src++, texture, tex_width);
+		}
+	}
+}
+
+static void pixels_8_from_texture(void *pixels, int16_t w, int16_t h,
+                                  int16_t pitch, void *texture)
+{
+	u8 *dst = pixels;
+	int tex_width = (w + 7) / 8 * 8;
+
+	for (int y = 0; y < h; y++)
+	{
+		dst = (u8*)pixels + pitch * y;
+		for (int x = 0; x < w; x ++)
+		{
+			*dst++ = get_pixel_8_from_texture(x, y, texture, tex_width);
+		}
+	}
+}
+
 static void pixels_to_texture(void *pixels, const SDL_PixelFormat *format,
                               int16_t w, int16_t h, int16_t pitch, void *texture)
 {
 	switch (format->BytesPerPixel) {
+	case 1:
+		pixels_8_to_texture(pixels, w, h, pitch, texture);
+		break;
 	case 2:
 		pixels_16_to_texture(pixels, pitch, h, texture);
 		break;
@@ -487,6 +542,9 @@ static void pixels_from_texture(void *pixels, const SDL_PixelFormat *format,
                                 int16_t w, int16_t h, int16_t pitch, void *texture)
 {
 	switch (format->BytesPerPixel) {
+	case 1:
+		pixels_8_from_texture(pixels, w, h, pitch, texture);
+		break;
 	case 2:
 		pixels_16_from_texture(pixels, pitch, h, texture);
 		break;
@@ -522,14 +580,12 @@ static void load_surface_texture(const SDL_Surface *surface)
 	int bpp = surface->format->BitsPerPixel;
 	void *tex = surface->hwdata->texture;
 	if (bpp == 8) {
-		// TODO: handle palette
-#if 0
+		u16 *palette = current->palette;
 		GX_InitTlutObj(&texpalette_a, palette, GX_TL_IA8, 256);
 		GX_InitTlutObj(&texpalette_b, (Uint16*)palette+256, GX_TL_IA8, 256);
 		DCStoreRange(palette, sizeof(512*sizeof(Uint16)));
 		GX_LoadTlut(&texpalette_a, GX_TLUT0);
 		GX_LoadTlut(&texpalette_b, GX_TLUT1);
-#endif
 
 		GX_InitTexObjCI(&texobj_a, tex, surface->w, surface->h, GX_TF_CI8, GX_CLAMP, GX_CLAMP, 0, GX_TLUT0);
 		GX_InitTexObjCI(&texobj_b, tex, surface->w, surface->h, GX_TF_CI8, GX_CLAMP, GX_CLAMP, 0, GX_TLUT1);
