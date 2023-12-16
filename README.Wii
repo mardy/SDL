@@ -66,11 +66,13 @@ understanding a few things:
    SDL_HWSURFACE flag. In order to accelerated their blit, convert the surface
    to an accelerated one:
 
+    ```c
     SDL_Surface *s = TTF_RenderUTF8_Blended(font, text, color);
     // 's' is a software surface, its blit will be slow
     SDL_Surface *surface = SDL_DisplayFormatAlpha(s);
     SDL_FreeSurface(s);
 	// The blit of `surface` to the screen will be accelerated
+    ```
 
 5. Calls to SDL_LockSurface() on the hardware surfaces have a strong impact on
    performance, because they require the surface to be reconverted from and to
