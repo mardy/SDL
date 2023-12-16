@@ -3,6 +3,10 @@
 This port uses the libogc library and is meant to be built with the devkitPPC
 toolchain, available from http://www.devkitpro.org
 
+This project is a fork of the devkitPro/SDL repository[1] which adds
+accelerated 2D operations and a few other improvements. I'm working to get
+these changes accepted upstream.
+
 
 ## Installation instructions
 
@@ -45,3 +49,47 @@ Should these instructions become obsolete, please have a look at [devkitPro's
 pacman recipe for
 SDL](https://github.com/devkitPro/pacman-packages/tree/master/wii/SDL), which
 will probably give you a hint on how to update these manual build commands.
+
+
+## Usage hints
+
+The `SDL_FillRect` and the `SDL_BlitSurface` are accelerated using the OGC/Wii
+GX graphic processor, but getting the best performance out of it requires
+understanding a few things:
+
+1. Only operations to the main screen surface are currently accelerated.
+2. Acceleration is only enabled if the `SDL_HWSURFACE` flag was passed to the
+   `SDL_SetVideoMode()` function.
+3. Blits are accelerated only if the source surface has the `SDL_HWSURFACE` flag,
+   too.
+4. Some libraries, such as `SDL_ttf`, generate surfaces that lack the
+   SDL_HWSURFACE flag. In order to accelerated their blit, convert the surface
+   to an accelerated one:
+
+    SDL_Surface *s = TTF_RenderUTF8_Blended(font, text, color);
+    // 's' is a software surface, its blit will be slow
+    SDL_Surface *surface = SDL_DisplayFormatAlpha(s);
+    SDL_FreeSurface(s);
+	// The blit of `surface` to the screen will be accelerated
+
+5. Calls to SDL_LockSurface() on the hardware surfaces have a strong impact on
+   performance, because they require the surface to be reconverted from and to
+   the GX texture format. If you really cannot avoid them, try at least to
+   group them up so that they are not intervalled with accelerated calls.
+6. Non accelerated blits are implemented by libSDL by software pixel operations
+   performed after locking the surface, so what is written in the point above
+   holds true for them, too. Make sure that all the surfaces that you blit to the
+   main screen have the `SDL_HWSURFACE` flag set.
+7. Palletized 8-bit mode and 8-bit textures have been poorly tested. If you
+   encounter some issues, please file a bug.
+8. To find out whether your blits are accelerated, you can set the
+   `SDL_OGC_DEBUG_ACCEL` environment variable to `"1"` before initializing SDL,
+   and then all the accelerated operations will be rendered only in half, as
+   rectangles; while this is obviously not suitable for the final product, while
+   developing or fine-tuning your application you'll have a simple way to find
+   out which operations are not accelerated: if they appear correctly on the
+   screen (that is, as full rectangles), then they are *not* accelerated.
+9. To quickly switch off hardware acceleration, you can set the
+   `SDL_OGC_DISABLE_ACCEL` environment variable to `"1"`.
+
+[1]: https://github.com/devkitPro/SDL
