@@ -886,7 +886,7 @@ if(SDL_ASSEMBLY)
 
     check_include_file("immintrin.h" HAVE_IMMINTRIN_H)
 
-    if(SDL_ALTIVEC)
+    if(SDL_ALTIVEC AND NOT OGC)
       set(CMAKE_REQUIRED_FLAGS "-maltivec")
       check_c_source_compiles("
           #include <altivec.h>
