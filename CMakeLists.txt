@@ -2941,6 +2941,13 @@ elseif(OGC)
     set(HAVE_SDL_THREADS TRUE)
   endif()
 
+  if(SDL_TIMERS)
+    set(SDL_TIMER_OGC 1)
+    file(GLOB OGC_TIMER_SOURCES ${SDL2_SOURCE_DIR}/src/timer/ogc/*.c)
+    list(APPEND SOURCE_FILES ${OGC_TIMER_SOURCES})
+    set(HAVE_SDL_TIMERS TRUE)
+  endif()
+
   if(NOT SDL2_DISABLE_SDL2MAIN)
     list(APPEND EXTRA_LIBS "SDL2main")
     list(APPEND EXTRA_LIBS "fat")
