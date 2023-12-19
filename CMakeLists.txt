@@ -2960,6 +2960,13 @@ elseif(OGC)
     set(HAVE_SDL_TIMERS TRUE)
   endif()
 
+  if(SDL_VIDEO)
+    set(SDL_VIDEO_DRIVER_OGC 1)
+    file(GLOB OGC_VIDEO_SOURCES ${SDL2_SOURCE_DIR}/src/video/ogc/*.c)
+    list(APPEND SOURCE_FILES ${OGC_VIDEO_SOURCES})
+    set(HAVE_SDL_VIDEO TRUE)
+  endif()
+
   if(NOT SDL2_DISABLE_SDL2MAIN)
     list(APPEND EXTRA_LIBS "SDL2main")
     list(APPEND EXTRA_LIBS "fat")
