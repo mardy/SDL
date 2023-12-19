@@ -117,6 +117,14 @@
 */
 #define SDL_MAIN_AVAILABLE
 
+#elif defined(__wii__) || defined(__gamecube__)
+/*
+  On Wii and GameCube, SDL provides a main function that sets up the system.
+
+  If you provide this yourself, you may define SDL_MAIN_HANDLED
+*/
+#define SDL_MAIN_AVAILABLE
+
 #endif
 #endif /* SDL_MAIN_HANDLED */
 
