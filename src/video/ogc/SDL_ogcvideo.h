@@ -25,6 +25,15 @@
 
 #include "../SDL_sysvideo.h"
 
+#include <ogc/gx_struct.h>
+
+typedef struct SDL_VideoData
+{
+    GXRModeObj *vmode;
+    u8 *gp_fifo;
+    void *xfb[2];
+} SDL_VideoData;
+
 #endif /* SDL_ogcvideo_h_ */
 
 /* vi: set ts=4 sw=4 expandtab: */

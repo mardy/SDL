@@ -27,8 +27,8 @@
 
 #include "../../events/SDL_events_c.h"
 
-#include "SDL_ogcvideo.h"
 #include "SDL_ogcevents_c.h"
+#include "SDL_ogcvideo.h"
 
 void OGC_PumpEvents(_THIS)
 {

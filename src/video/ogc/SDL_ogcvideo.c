@@ -22,69 +22,62 @@
 
 #ifdef SDL_VIDEO_DRIVER_OGC
 
-/* Dummy SDL video driver implementation; this is just enough to make an
- *  SDL-based application THINK it's got a working video driver, for
- *  applications that call SDL_Init(SDL_INIT_VIDEO) when they don't need it,
- *  and also for use as a collection of stubs when porting SDL to a new
- *  platform for which you haven't yet written a valid video driver.
- *
- * This is also a great way to determine bottlenecks: if you think that SDL
- *  is a performance problem for a given platform, enable this driver, and
- *  then see if your application runs faster without video overhead.
- *
- * Initial work by Ryan C. Gordon (icculus@icculus.org). A good portion
- *  of this was cut-and-pasted from Stephane Peter's work in the AAlib
- *  SDL video driver.  Renamed to "OGC" by Sam Lantinga.
- */
-
-#include "SDL_video.h"
-#include "SDL_mouse.h"
-#include "../SDL_sysvideo.h"
-#include "../SDL_pixels_c.h"
 #include "../../events/SDL_events_c.h"
+#include "../SDL_pixels_c.h"
+#include "../SDL_sysvideo.h"
+#include "SDL_mouse.h"
+#include "SDL_video.h"
 
-#include "SDL_ogcvideo.h"
+#include "SDL_hints.h"
 #include "SDL_ogcevents_c.h"
 #include "SDL_ogcframebuffer_c.h"
-#include "SDL_hints.h"
+#include "SDL_ogcvideo.h"
+
+#include <malloc.h>
+#include <ogc/color.h>
+#include <ogc/gx.h>
+#include <ogc/system.h>
+#include <ogc/video.h>
+
+#define DEFAULT_FIFO_SIZE 256 * 1024
 
 /* Initialization/Query functions */
 static int OGC_VideoInit(_THIS);
 static void OGC_VideoQuit(_THIS);
 
-#ifdef SDL_INPUT_LINUXEV
-static int evdev = 0;
-static void OGC_EVDEV_Poll(_THIS);
-#endif
-
 /* OGC driver bootstrap functions */
 
 static void OGC_DeleteDevice(SDL_VideoDevice *device)
 {
+    SDL_free(device->driverdata);
     SDL_free(device);
 }
 
 static SDL_VideoDevice *OGC_CreateDevice(void)
 {
     SDL_VideoDevice *device;
+    SDL_VideoData *videodata;
 
     /* Initialize all variables that we clean on shutdown */
     device = (SDL_VideoDevice *)SDL_calloc(1, sizeof(SDL_VideoDevice));
     if (!device) {
         SDL_OutOfMemory();
-        return 0;
+        return NULL;
     }
-    device->is_dummy = SDL_TRUE;
+
+    videodata = (SDL_VideoData *)SDL_calloc(1, sizeof(SDL_VideoData));
+    if (!videodata) {
+        SDL_OutOfMemory();
+        SDL_free(device);
+        return NULL;
+    }
+
+    device->driverdata = videodata;
 
     /* Set the function pointers */
     device->VideoInit = OGC_VideoInit;
     device->VideoQuit = OGC_VideoQuit;
     device->PumpEvents = OGC_PumpEvents;
-#ifdef SDL_INPUT_LINUXEV
-    if (evdev) {
-        device->PumpEvents = OGC_EVDEV_Poll;
-    }
-#endif
     device->CreateWindowFramebuffer = SDL_OGC_CreateWindowFramebuffer;
     device->UpdateWindowFramebuffer = SDL_OGC_UpdateWindowFramebuffer;
     device->DestroyWindowFramebuffer = SDL_OGC_DestroyWindowFramebuffer;
@@ -99,30 +92,60 @@ VideoBootStrap OGC_bootstrap = {
     OGC_CreateDevice
 };
 
-#ifdef SDL_INPUT_LINUXEV
-VideoBootStrap OGC_evdev_bootstrap = {
-    OGCVID_DRIVER_EVDEV_NAME, "SDL dummy video driver with evdev",
-    OGC_CreateDevice
-};
-void SDL_EVDEV_Init(void);
-void SDL_EVDEV_Poll();
-void SDL_EVDEV_Quit(void);
-static void OGC_EVDEV_Poll(_THIS)
-{
-    (void)_this;
-    SDL_EVDEV_Poll();
-}
-#endif
-
 int OGC_VideoInit(_THIS)
 {
+    SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
     SDL_DisplayMode mode;
+    GXRModeObj *vmode;
+    static const GXColor background = { 0, 0, 0, 255 };
+
+    VIDEO_Init();
+
+    vmode = VIDEO_GetPreferredMode(NULL);
+    VIDEO_Configure(vmode);
+
+    /* Allocate the XFB */
+    videodata->xfb[0] = MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
+    videodata->xfb[1] = NULL; /* We'll allocate this when double-buffering */
+
+    VIDEO_ClearFrameBuffer(vmode, videodata->xfb[0], COLOR_BLACK);
+    VIDEO_SetNextFramebuffer(videodata->xfb[0]);
+    VIDEO_SetBlack(false);
+    VIDEO_Flush();
+
+    videodata->gp_fifo = memalign(32, DEFAULT_FIFO_SIZE);
+    memset(videodata->gp_fifo, 0, DEFAULT_FIFO_SIZE);
+    GX_Init(videodata->gp_fifo, DEFAULT_FIFO_SIZE);
+
+    GX_SetViewport(0, 0, vmode->fbWidth, vmode->efbHeight, 0, 1);
+    GX_SetScissor(0, 0, vmode->fbWidth, vmode->efbHeight);
+
+    /* Setup the EFB -> XFB copy operation */
+    GX_SetDispCopySrc(0, 0, vmode->fbWidth, vmode->efbHeight);
+    GX_SetDispCopyDst(vmode->fbWidth, vmode->xfbHeight);
+    GX_SetDispCopyYScale((f32)vmode->xfbHeight / (f32)vmode->efbHeight);
+    GX_SetCopyFilter(vmode->aa, vmode->sample_pattern, GX_FALSE, vmode->vfilter);
+    GX_SetCopyClear(background, GX_MAX_Z24);
+
+    GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
+    {
+        /* These are only useful for direct EFB access. TODO: remove */
+        GX_PokeColorUpdate(GX_ENABLE);
+        GX_PokeAlphaUpdate(GX_ENABLE);
+        GX_PokeDither(GX_FALSE);
+        GX_PokeBlendMode(GX_BM_NONE, GX_BL_ZERO, GX_BL_ONE, GX_LO_SET);
+        GX_PokeAlphaMode(GX_ALWAYS, 0);
+        GX_PokeAlphaRead(GX_READ_FF);
+        GX_PokeDstAlpha(GX_DISABLE, 0);
+        GX_PokeZMode(GX_TRUE, GX_ALWAYS, GX_TRUE);
+    }
+    GX_Flush();
 
     /* Use a fake 32-bpp desktop mode */
     SDL_zero(mode);
-    mode.format = SDL_PIXELFORMAT_RGB888;
-    mode.w = 1024;
-    mode.h = 768;
+    mode.format = SDL_PIXELFORMAT_ARGB8888;
+    mode.w = vmode->fbWidth;
+    mode.h = vmode->xfbHeight;
     mode.refresh_rate = 60;
     mode.driverdata = NULL;
     if (SDL_AddBasicVideoDisplay(&mode) < 0) {
@@ -131,19 +154,19 @@ int OGC_VideoInit(_THIS)
 
     SDL_AddDisplayMode(&_this->displays[0], &mode);
 
-#ifdef SDL_INPUT_LINUXEV
-    SDL_EVDEV_Init();
-#endif
-
-    /* We're done! */
+    videodata->vmode = vmode;
     return 0;
 }
 
 void OGC_VideoQuit(_THIS)
 {
-#ifdef SDL_INPUT_LINUXEV
-    SDL_EVDEV_Quit();
-#endif
+    SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
+
+    SDL_free(videodata->gp_fifo);
+    if (videodata->xfb[0])
+        free(MEM_K1_TO_K0(videodata->xfb[0]));
+    if (videodata->xfb[1])
+        free(MEM_K1_TO_K0(videodata->xfb[1]));
 }
 
 #endif /* SDL_VIDEO_DRIVER_OGC */

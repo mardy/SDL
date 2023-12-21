@@ -24,59 +24,42 @@
 
 #include "../SDL_sysvideo.h"
 #include "SDL_ogcframebuffer_c.h"
+#include "SDL_ogcvideo.h"
 
-#define OGC_SURFACE "_SDL_DummySurface"
+#include <ogc/gx.h>
+#include <ogc/system.h>
+#include <ogc/video.h>
 
 int SDL_OGC_CreateWindowFramebuffer(_THIS, SDL_Window *window, Uint32 *format, void **pixels, int *pitch)
 {
-    SDL_Surface *surface;
-    const Uint32 surface_format = SDL_PIXELFORMAT_RGB888;
-    int w, h;
+    const Uint32 surface_format = SDL_PIXELFORMAT_ARGB8888;
+    int bytes_per_pixel = 4;
 
-    /* Free the old framebuffer surface */
-    SDL_OGC_DestroyWindowFramebuffer(_this, window);
-
-    /* Create a new one */
-    SDL_GetWindowSizeInPixels(window, &w, &h);
-    surface = SDL_CreateRGBSurfaceWithFormat(0, w, h, 0, surface_format);
-    if (!surface) {
-        return -1;
-    }
-
+    puts("Creating window\n");
     /* Save the info and return! */
-    SDL_SetWindowData(window, OGC_SURFACE, surface);
+    *pitch = 1024 * bytes_per_pixel;
     *format = surface_format;
-    *pixels = surface->pixels;
-    *pitch = surface->pitch;
+    *pixels = MEM_PHYSICAL_TO_K0(0x8000000);
     return 0;
 }
 
 int SDL_OGC_UpdateWindowFramebuffer(_THIS, SDL_Window *window, const SDL_Rect *rects, int numrects)
 {
-    static int frame_number;
-    SDL_Surface *surface;
+    SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
 
-    surface = (SDL_Surface *)SDL_GetWindowData(window, OGC_SURFACE);
-    if (!surface) {
-        return SDL_SetError("Couldn't find dummy surface for window");
-    }
+    GX_CopyDisp(videodata->xfb[0], GX_FALSE);
+    GX_DrawDone();
+    GX_Flush();
 
-    /* Send the data to the display */
-    if (SDL_getenv("SDL_VIDEO_OGC_SAVE_FRAMES")) {
-        char file[128];
-        (void)SDL_snprintf(file, sizeof(file), "SDL_window%" SDL_PRIu32 "-%8.8d.bmp",
-                           SDL_GetWindowID(window), ++frame_number);
-        SDL_SaveBMP(surface, file);
-    }
+    VIDEO_Flush();
+    VIDEO_WaitVSync();
+
     return 0;
 }
 
 void SDL_OGC_DestroyWindowFramebuffer(_THIS, SDL_Window *window)
 {
-    SDL_Surface *surface;
-
-    surface = (SDL_Surface *)SDL_SetWindowData(window, OGC_SURFACE, NULL);
-    SDL_FreeSurface(surface);
+    puts("Destroying window\n");
 }
 
 #endif /* SDL_VIDEO_DRIVER_OGC */
