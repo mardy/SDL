@@ -20,27 +20,20 @@
 */
 #include "../../SDL_internal.h"
 
-#ifndef SDL_ogcvideo_h_
-#define SDL_ogcvideo_h_
+#ifndef SDL_ogcpixels_h_
+#define SDL_ogcpixels_h_
 
-#include "../SDL_sysvideo.h"
+#include "SDL_pixels.h"
 
-#include <ogc/gx_struct.h>
+#include <gctypes.h>
 
-typedef struct SDL_VideoData
-{
-    GXRModeObj *vmode;
-    u8 *gp_fifo;
-    void *xfb[2];
-} SDL_VideoData;
+void OGC_pixels_to_texture(void *pixels, SDL_PixelFormatEnum format,
+                           int16_t w, int16_t h, int16_t pitch,
+                           void *texels, u8 *gx_format);
+void OGC_pixels_from_texture(void *pixels, SDL_PixelFormatEnum format,
+                             int16_t w, int16_t h, int16_t pitch,
+                             void *texels);
 
-typedef struct SDL_WindowData
-{
-    void *pixels;
-    u8 *texels;
-    SDL_PixelFormatEnum surface_format;
-} SDL_WindowData;
-
-#endif /* SDL_ogcvideo_h_ */
+#endif /* SDL_ogcpixels_h_ */
 
 /* vi: set ts=4 sw=4 expandtab: */

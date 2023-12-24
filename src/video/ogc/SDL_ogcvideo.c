@@ -31,6 +31,7 @@
 #include "SDL_hints.h"
 #include "SDL_ogcevents_c.h"
 #include "SDL_ogcframebuffer_c.h"
+#include "SDL_ogcgxcommon.h"
 #include "SDL_ogcvideo.h"
 
 #include <malloc.h>
@@ -98,6 +99,7 @@ int OGC_VideoInit(_THIS)
     SDL_DisplayMode mode;
     GXRModeObj *vmode;
     static const GXColor background = { 0, 0, 0, 255 };
+    int h_aspect, v_aspect;
 
     VIDEO_Init();
 
@@ -127,18 +129,19 @@ int OGC_VideoInit(_THIS)
     GX_SetCopyFilter(vmode->aa, vmode->sample_pattern, GX_FALSE, vmode->vfilter);
     GX_SetCopyClear(background, GX_MAX_Z24);
 
+    GX_SetFieldMode(vmode->field_rendering,
+                    ((vmode->viHeight == 2 * vmode->xfbHeight) ? GX_ENABLE : GX_DISABLE));
     GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
-    {
-        /* These are only useful for direct EFB access. TODO: remove */
-        GX_PokeColorUpdate(GX_ENABLE);
-        GX_PokeAlphaUpdate(GX_ENABLE);
-        GX_PokeDither(GX_FALSE);
-        GX_PokeBlendMode(GX_BM_NONE, GX_BL_ZERO, GX_BL_ONE, GX_LO_SET);
-        GX_PokeAlphaMode(GX_ALWAYS, 0);
-        GX_PokeAlphaRead(GX_READ_FF);
-        GX_PokeDstAlpha(GX_DISABLE, 0);
-        GX_PokeZMode(GX_TRUE, GX_ALWAYS, GX_TRUE);
-    }
+    GX_SetCullMode(GX_CULL_NONE);
+    GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+
+    GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
+
+    /* Should we need to adjust the aspect, this is the place to do it */
+    h_aspect = 320;
+    v_aspect = 240;
+    OGC_draw_init(vmode->fbWidth, vmode->efbHeight, h_aspect, v_aspect);
+
     GX_Flush();
 
     /* Use a fake 32-bpp desktop mode */
