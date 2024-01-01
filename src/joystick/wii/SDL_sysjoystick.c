@@ -63,6 +63,8 @@
 #define AXIS_MIN -32767 /* minimum value for axis coordinate */
 #define AXIS_MAX 32767  /* maximum value for axis coordinate */
 
+#define MAX_RUMBLE 8
+
 typedef struct joystick_paddata_t
 {
     u16 prev_buttons;
@@ -97,6 +99,9 @@ typedef struct joystick_wpaddata_t
 typedef struct joystick_hwdata
 {
     int index;
+    /*  This must be big enough for MAX_RUMBLE */
+    char rumble_intensity;
+    u16 rumble_loop;
     union
     {
         joystick_paddata gamecube;
@@ -250,6 +255,40 @@ static void report_joystick(int index, int connected)
     if (connected) {
         s_connected_instances[index] = SDL_GetNextJoystickInstanceID();
         SDL_PrivateJoystickAdded(s_connected_instances[index]);
+    }
+}
+
+static void update_rumble(SDL_Joystick *joystick)
+{
+    char intensity = joystick->hwdata->rumble_intensity;
+    s16 loop;
+    int index, rest_frames;
+    bool rumble;
+    if (intensity == 0 || intensity == MAX_RUMBLE - 1) return;
+
+    loop = ++joystick->hwdata->rumble_loop;
+
+    /* The rest_frames constant should probably be set according to the current
+     * framerate; or we should rework the logic to be completely time-based.
+     * It may also be that we need different values depending on the controller
+     * type. */
+    rest_frames = 2;
+    if (loop == 1) {
+        rumble = false;
+    } else if (loop > (MAX_RUMBLE - 1 - intensity) * rest_frames) {
+        rumble = true;
+        joystick->hwdata->rumble_loop = 0;
+    } else {
+        /* Keep the engine stopped until our time comes again */
+        return;
+    }
+
+    index = joystick->hwdata->index;
+    if (index >= GC_JOYSTICKS_START && index < GC_JOYSTICKS_END) {
+        PAD_ControlMotor(index - GC_JOYSTICKS_START,
+                         rumble ? PAD_MOTOR_RUMBLE : PAD_MOTOR_STOP);
+    } else if (index >= WII_WIIMOTES_START && index < WII_JOYSTICKS_END) {
+        WPAD_Rumble(index - WII_WIIMOTES_START, rumble);
     }
 }
 
@@ -499,7 +538,36 @@ static int WII_JoystickRumble(SDL_Joystick *joystick,
                               Uint16 low_frequency_rumble,
                               Uint16 high_frequency_rumble)
 {
-    return SDL_Unsupported();
+    int index = joystick->hwdata->index;
+    /* The Wii and GameCube controllers do not support setting the frequency of
+     * the rumble, so we use a hack where we periodically stop and start the
+     * motors during Update(). */
+    char intensity = MAX_RUMBLE *
+        ((low_frequency_rumble + high_frequency_rumble) / 2) /
+        0xffff;
+    /* We don't accept MAX_RUMBLE itself */
+    if (intensity >= MAX_RUMBLE)
+        intensity = MAX_RUMBLE - 1;
+
+    /* If it's the same as the current value, do nothing */
+    if (intensity == joystick->hwdata->rumble_intensity) {
+        return 0;
+    }
+
+    if (index >= GC_JOYSTICKS_START && index < GC_JOYSTICKS_END) {
+        PAD_ControlMotor(index - GC_JOYSTICKS_START,
+                         intensity > 0 ? PAD_MOTOR_RUMBLE : PAD_MOTOR_STOP);
+    } else if (index >= WII_WIIMOTES_START && index < WII_JOYSTICKS_END) {
+        WPAD_Rumble(index - WII_WIIMOTES_START, intensity > 0);
+    } else {
+        return SDL_Unsupported();
+    }
+
+    /* Save the current rumble status, we need it in update_rumble() */
+    joystick->hwdata->rumble_intensity = intensity;
+    joystick->hwdata->rumble_loop = 0;
+
+    return 0;
 }
 
 static int WII_JoystickRumbleTriggers(SDL_Joystick *joystick,
@@ -510,8 +578,17 @@ static int WII_JoystickRumbleTriggers(SDL_Joystick *joystick,
 
 static Uint32 WII_JoystickGetCapabilities(SDL_Joystick *joystick)
 {
-    /* TODO */
-    return 0;
+    Uint32 capabilities = 0;
+
+    int index = joystick->hwdata->index;
+    if ((index >= GC_JOYSTICKS_START && index < GC_JOYSTICKS_END) ||
+        /* Rumble is supported on the wiimotes, but it makes sense only if no
+         * expansion is attached, of if we are in split mode. */
+        (index >= WII_WIIMOTES_START && index < WII_WIIMOTES_END &&
+         (s_detected_devices[index] == 1 || split_joysticks))) {
+        capabilities |= SDL_JOYCAP_RUMBLE;
+    }
+    return capabilities;
 }
 
 static int WII_JoystickSetLED(SDL_Joystick *joystick,
@@ -691,6 +768,10 @@ static void _HandleWiiJoystickUpdate(SDL_Joystick *joystick)
         update_expansion = true;
     }
 
+    if (update_wiimote) {
+        update_rumble(joystick);
+    }
+
     if (!s_wii_has_new_data[wpad_index])
         return;
 
@@ -847,6 +928,8 @@ static void _HandleGCJoystickUpdate(SDL_Joystick *joystick)
     int axis;
     joystick_hwdata *prev_state;
     int index = joystick->hwdata->index - GC_JOYSTICKS_START;
+
+    update_rumble(joystick);
 
     buttons = PAD_ButtonsHeld(index);
     prev_state = joystick->hwdata;
