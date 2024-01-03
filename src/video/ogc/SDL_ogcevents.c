@@ -30,9 +30,22 @@
 #include "SDL_ogcevents_c.h"
 #include "SDL_ogcvideo.h"
 
+#include <ogc/system.h>
+
+/* These variables can be set from the handlers registered in SDL_main() */
+bool OGC_PowerOffRequested = false;
+bool OGC_ResetRequested = false;
+
 void OGC_PumpEvents(_THIS)
 {
-    /* do nothing. */
+    if (OGC_ResetRequested || OGC_PowerOffRequested) {
+        SDL_Event ev;
+        ev.type = SDL_QUIT;
+        SDL_PushEvent(&ev);
+        if (OGC_PowerOffRequested) {
+            SYS_ResetSystem(SYS_POWEROFF, 0, 0);
+        }
+    }
 }
 
 #endif /* SDL_VIDEO_DRIVER_OGC */

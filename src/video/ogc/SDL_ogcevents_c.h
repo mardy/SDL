@@ -26,6 +26,9 @@
 
 #include "SDL_ogcvideo.h"
 
+extern bool OGC_ResetRequested;
+extern bool OGC_PowerOffRequested;
+
 extern void OGC_PumpEvents(_THIS);
 
 #endif /* SDL_ogcevents_c_h_ */

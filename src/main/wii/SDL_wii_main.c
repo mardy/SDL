@@ -25,6 +25,8 @@
 
 #include "SDL_main.h"
 
+#include "../../video/ogc/SDL_ogcevents_c.h"
+
 #ifdef main
 #undef main
 #endif
@@ -39,42 +41,14 @@
 #include <wiikeyboard/keyboard.h>
 #include <wiiuse/wpad.h>
 
-bool TerminateRequested = false, ShutdownRequested = false, ResetRequested = false;
-
-void SDL_Quit();
-
 static void ShutdownCB()
 {
-    TerminateRequested = 1;
-    ShutdownRequested = 1;
+    OGC_PowerOffRequested = true;
 }
 
 static void ResetCB()
 {
-    TerminateRequested = 1;
-    ResetRequested = 1;
-}
-
-void ShutdownWii()
-{
-    TerminateRequested = 0;
-    SDL_Quit();
-    SYS_ResetSystem(SYS_POWEROFF, 0, 0);
-}
-
-void RestartHomebrewChannel()
-{
-    TerminateRequested = 0;
-    SDL_Quit();
-    exit(1);
-}
-
-void Terminate()
-{
-    if (ShutdownRequested)
-        ShutdownWii();
-    else if (ResetRequested)
-        RestartHomebrewChannel();
+    OGC_ResetRequested = true;
 }
 
 int main(int argc, char *argv[])
