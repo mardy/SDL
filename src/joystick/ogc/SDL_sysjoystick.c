@@ -109,6 +109,7 @@ typedef struct joystick_hwdata
     };
 } joystick_hwdata;
 
+#ifdef __wii__
 static const u32 sdl_buttons_wii[] = {
     WPAD_BUTTON_A | WPAD_CLASSIC_BUTTON_A,
     WPAD_BUTTON_B | WPAD_CLASSIC_BUTTON_B,
@@ -163,6 +164,7 @@ static const u32 sdl_buttons_classic[] = {
 };
 #define SDL_WII_NUM_BUTTONS_CLASSIC \
     (sizeof(sdl_buttons_classic) / sizeof(sdl_buttons_classic[0]))
+#endif /* __wii__ */
 
 static const u16 sdl_buttons_gc[] = {
     PAD_BUTTON_A,
@@ -182,22 +184,10 @@ static SDL_JoystickID s_connected_instances[MAX_JOYSTICKS];
 static char s_detected_devices[MAX_JOYSTICKS];
 static char s_gc_failed_reads = 0;
 static u32 s_gc_last_scanpads = 0;
+#ifdef __wii__
 static bool s_wii_has_new_data[MAX_WII_JOYSTICKS];
+#endif
 static bool s_hardware_queried = false;
-
-/* Helpers to separate nunchuk vs classic buttons which share the
- * same scan codes. In particular, up on the classic controller is
- * the same as Z on the nunchuk. The numbers refer to the sdl_buttons_wii
- * list above. */
-static int wii_button_is_nunchuk(int idx)
-{
-    return idx == 7 || idx == 8;
-}
-
-static int wii_button_is_classic(int idx)
-{
-    return idx >= 9;
-}
 
 /* Joypad index is 0-11: 4 GC, 4 Wiimotes and (if split_joysticks) 4 expansions
  */
@@ -358,6 +348,7 @@ static void OGC_JoystickDetect(void)
         }
     }
 
+#ifdef __wii__
     for (int i = 0; i < MAX_WII_JOYSTICKS; i++) {
         int connected, was_connected, index;
         WPADData *data;
@@ -388,6 +379,7 @@ static void OGC_JoystickDetect(void)
             report_joystick(index, connected);
         }
     }
+#endif
 
     /* This is to force a refresh, the next time that Update() or Detect() are
      * called. This relies on the fact that SDL calls Detect() after Update().
@@ -406,6 +398,7 @@ static const char *OGC_JoystickGetDeviceName(int device_index)
 
     if (index >= GC_JOYSTICKS_START && index < GC_JOYSTICKS_END) {
         sprintf(joy_name, "Gamecube %d", index);
+#ifdef __wii__
     } else if (index >= WII_WIIMOTES_START && index < WII_WIIMOTES_END) {
         char *name_ptr = joy_name;
         int expansion = s_detected_devices[index] - 1;
@@ -452,6 +445,7 @@ static const char *OGC_JoystickGetDeviceName(int device_index)
             sprintf(joy_name, "Unknown %d", idx);
             break;
         }
+#endif
     } else {
         sprintf(joy_name, "Invalid device index: %d", device_index);
     }
@@ -523,7 +517,12 @@ static int OGC_JoystickOpen(SDL_Joystick *joystick, int device_index)
 
     SDL_memset(joystick->hwdata, 0, sizeof(joystick_hwdata));
     joystick->hwdata->index = index;
-    if (index >= WII_JOYSTICKS_START && index < WII_JOYSTICKS_END) {
+    if (index >= GC_JOYSTICKS_START && index < GC_JOYSTICKS_END) {
+        joystick->nbuttons = MAX_GC_BUTTONS;
+        joystick->naxes = MAX_GC_AXES;
+        joystick->nhats = MAX_GC_HATS;
+#ifdef __wii__
+    } else {
         if (split_joysticks) {
             if (index < MAX_GC_JOYSTICKS + MAX_WII_JOYSTICKS) {
                 // wiimote
@@ -542,10 +541,7 @@ static int OGC_JoystickOpen(SDL_Joystick *joystick, int device_index)
             joystick->naxes = MAX_WII_AXES;
             joystick->nhats = MAX_WII_HATS;
         }
-    } else { /* GameCube */
-        joystick->nbuttons = MAX_GC_BUTTONS;
-        joystick->naxes = MAX_GC_AXES;
-        joystick->nhats = MAX_GC_HATS;
+#endif
     }
     return 0;
 }
@@ -619,6 +615,7 @@ static int OGC_JoystickSetSensorsEnabled(SDL_Joystick *joystick, SDL_bool enable
     return SDL_Unsupported();
 }
 
+#ifdef __wii__
 static s16 WPAD_Orient(WPADData *data, int motion)
 {
     float out;
@@ -711,6 +708,20 @@ static void HandleWiiHats(SDL_Joystick *joystick,
             hat |= SDL_HAT_RIGHT;
         SDL_PrivateJoystickHat(joystick, 0, hat);
     }
+}
+
+/* Helpers to separate nunchuk vs classic buttons which share the
+ * same scan codes. In particular, up on the classic controller is
+ * the same as Z on the nunchuk. The numbers refer to the sdl_buttons_wii
+ * list above. */
+static int wii_button_is_nunchuk(int idx)
+{
+    return idx == 7 || idx == 8;
+}
+
+static int wii_button_is_classic(int idx)
+{
+    return idx >= 9;
 }
 
 static void HandleWiiButtons(SDL_Joystick *joystick,
@@ -931,6 +942,7 @@ static void _HandleWiiJoystickUpdate(SDL_Joystick *joystick)
         HandleWiiMotion(joystick, prev_state, data, start_index);
     }
 }
+#endif /* __wii__ */
 
 static void _HandleGCJoystickUpdate(SDL_Joystick *joystick)
 {
@@ -1013,8 +1025,10 @@ static void OGC_JoystickUpdate(SDL_Joystick *joystick)
     if (joystick->hwdata->index >= GC_JOYSTICKS_START &&
         joystick->hwdata->index < GC_JOYSTICKS_END) {
         _HandleGCJoystickUpdate(joystick);
+#ifdef __wii__
     } else {
         _HandleWiiJoystickUpdate(joystick);
+#endif
     }
 }
 
@@ -1067,6 +1081,7 @@ static SDL_bool OGC_JoystickGetGamepadMapping(int device_index,
             .righttrigger = { EMappingKind_Axis, 5 },
         };
         is_gamepad = SDL_TRUE;
+#ifdef __wii__
     } else if (index >= WII_WIIMOTES_START && index < WII_WIIMOTES_END) {
         int expansion = s_detected_devices[index] - 1;
         if (split_joysticks || expansion == 0) {
@@ -1198,6 +1213,7 @@ static SDL_bool OGC_JoystickGetGamepadMapping(int device_index,
             .righttrigger = { EMappingKind_Button, 7 },
         };
         is_gamepad = SDL_TRUE;
+#endif /* __wii__ */
     }
     return is_gamepad;
 }
