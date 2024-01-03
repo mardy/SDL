@@ -21,7 +21,7 @@
 
 #include "../../SDL_internal.h"
 
-#ifdef SDL_JOYSTICK_WII
+#ifdef SDL_JOYSTICK_OGC
 
 #include "../SDL_joystick_c.h"
 #include "../SDL_sysjoystick.h"
@@ -233,9 +233,11 @@ static void scan_hardware(void)
      * The Detect() callback, resets the s_hardware_queried variable. */
     if (!s_hardware_queried) {
         s_gc_last_scanpads = PAD_ScanPads();
+#ifdef __wii__
         for (int i = 0; i < MAX_WII_JOYSTICKS; i++) {
             s_wii_has_new_data[i] = WPAD_ReadPending(i, NULL);
         }
+#endif
         s_hardware_queried = true;
     }
 }
@@ -258,11 +260,27 @@ static void report_joystick(int index, int connected)
     }
 }
 
+static inline bool enable_rumble(int index, bool enable)
+{
+    if (index >= GC_JOYSTICKS_START && index < GC_JOYSTICKS_END) {
+        PAD_ControlMotor(index - GC_JOYSTICKS_START,
+                         enable ? PAD_MOTOR_RUMBLE : PAD_MOTOR_STOP);
+        return true;
+#ifdef __wii__
+    } else if (index >= WII_WIIMOTES_START && index < WII_JOYSTICKS_END) {
+        WPAD_Rumble(index - WII_WIIMOTES_START, enable);
+        return true;
+#endif
+    } else {
+        return false;
+    }
+}
+
 static void update_rumble(SDL_Joystick *joystick)
 {
     char intensity = joystick->hwdata->rumble_intensity;
     s16 loop;
-    int index, rest_frames;
+    int rest_frames;
     bool rumble;
     if (intensity == 0 || intensity == MAX_RUMBLE - 1) return;
 
@@ -283,13 +301,7 @@ static void update_rumble(SDL_Joystick *joystick)
         return;
     }
 
-    index = joystick->hwdata->index;
-    if (index >= GC_JOYSTICKS_START && index < GC_JOYSTICKS_END) {
-        PAD_ControlMotor(index - GC_JOYSTICKS_START,
-                         rumble ? PAD_MOTOR_RUMBLE : PAD_MOTOR_STOP);
-    } else if (index >= WII_WIIMOTES_START && index < WII_JOYSTICKS_END) {
-        WPAD_Rumble(index - WII_WIIMOTES_START, rumble);
-    }
+    enable_rumble(joystick->hwdata->index, rumble);
 }
 
 /* Function to scan the system for joysticks.
@@ -297,10 +309,14 @@ static void update_rumble(SDL_Joystick *joystick)
  * joysticks.  Joystick 0 should be the system default joystick.
  * It should return -1 on an unrecoverable fatal error.
  */
-static int WII_JoystickInit(void)
+static int OGC_JoystickInit(void)
 {
     const char *split_joystick_env = getenv("SDL_WII_JOYSTICK_SPLIT");
     split_joysticks = split_joystick_env && strcmp(split_joystick_env, "1") == 0;
+
+    PAD_Init();
+    /* We don't call WPAD_Init() here, since it's already been called by
+     * SDL_main for the Wii */
 
     /* Initialize the needed variables */
     for (int i = 0; i < MAX_JOYSTICKS; i++) {
@@ -309,7 +325,7 @@ static int WII_JoystickInit(void)
     return 0;
 }
 
-static int WII_JoystickGetCount(void)
+static int OGC_JoystickGetCount(void)
 {
     int count = 0;
 
@@ -320,7 +336,7 @@ static int WII_JoystickGetCount(void)
     return count;
 }
 
-static void WII_JoystickDetect(void)
+static void OGC_JoystickDetect(void)
 {
     scan_hardware();
 
@@ -382,7 +398,7 @@ static void WII_JoystickDetect(void)
 static char joy_name[128];
 
 /* Function to get the device-dependent name of a joystick */
-static const char *WII_JoystickGetDeviceName(int device_index)
+static const char *OGC_JoystickGetDeviceName(int device_index)
 {
     int index = device_index_to_joypad_index(device_index);
     if (index < 0)
@@ -442,21 +458,21 @@ static const char *WII_JoystickGetDeviceName(int device_index)
     return joy_name;
 }
 
-static const char *WII_JoystickGetDevicePath(int index)
+static const char *OGC_JoystickGetDevicePath(int index)
 {
     return NULL;
 }
 
-static int WII_JoystickGetDevicePlayerIndex(int device_index)
+static int OGC_JoystickGetDevicePlayerIndex(int device_index)
 {
     return -1;
 }
 
-static void WII_JoystickSetDevicePlayerIndex(int device_index, int player_index)
+static void OGC_JoystickSetDevicePlayerIndex(int device_index, int player_index)
 {
 }
 
-static SDL_JoystickGUID WII_JoystickGetDeviceGUID(int device_index)
+static SDL_JoystickGUID OGC_JoystickGetDeviceGUID(int device_index)
 {
     int index = device_index_to_joypad_index(device_index);
     Uint16 bus, product, version;
@@ -478,17 +494,17 @@ static SDL_JoystickGUID WII_JoystickGetDeviceGUID(int device_index)
     driver_signature = 0;
     driver_data = 0;
 
-    name = WII_JoystickGetDeviceName(device_index);
+    name = OGC_JoystickGetDeviceName(device_index);
     return SDL_CreateJoystickGUID(bus, USB_VENDOR_NINTENDO, product, version,
                                   name, driver_signature, driver_data);
 }
 
-static SDL_JoystickID WII_JoystickGetDeviceInstanceID(int device_index)
+static SDL_JoystickID OGC_JoystickGetDeviceInstanceID(int device_index)
 {
     return device_index_to_instance(device_index);
 }
 
-static int WII_JoystickOpen(SDL_Joystick *joystick, int device_index)
+static int OGC_JoystickOpen(SDL_Joystick *joystick, int device_index)
 {
     int index = device_index_to_joypad_index(device_index);
 
@@ -534,7 +550,7 @@ static int WII_JoystickOpen(SDL_Joystick *joystick, int device_index)
     return 0;
 }
 
-static int WII_JoystickRumble(SDL_Joystick *joystick,
+static int OGC_JoystickRumble(SDL_Joystick *joystick,
                               Uint16 low_frequency_rumble,
                               Uint16 high_frequency_rumble)
 {
@@ -554,12 +570,7 @@ static int WII_JoystickRumble(SDL_Joystick *joystick,
         return 0;
     }
 
-    if (index >= GC_JOYSTICKS_START && index < GC_JOYSTICKS_END) {
-        PAD_ControlMotor(index - GC_JOYSTICKS_START,
-                         intensity > 0 ? PAD_MOTOR_RUMBLE : PAD_MOTOR_STOP);
-    } else if (index >= WII_WIIMOTES_START && index < WII_JOYSTICKS_END) {
-        WPAD_Rumble(index - WII_WIIMOTES_START, intensity > 0);
-    } else {
+    if (!enable_rumble(index, intensity > 0)) {
         return SDL_Unsupported();
     }
 
@@ -570,13 +581,13 @@ static int WII_JoystickRumble(SDL_Joystick *joystick,
     return 0;
 }
 
-static int WII_JoystickRumbleTriggers(SDL_Joystick *joystick,
+static int OGC_JoystickRumbleTriggers(SDL_Joystick *joystick,
                                       Uint16 left_rumble, Uint16 right_rumble)
 {
     return SDL_Unsupported();
 }
 
-static Uint32 WII_JoystickGetCapabilities(SDL_Joystick *joystick)
+static Uint32 OGC_JoystickGetCapabilities(SDL_Joystick *joystick)
 {
     Uint32 capabilities = 0;
 
@@ -591,19 +602,19 @@ static Uint32 WII_JoystickGetCapabilities(SDL_Joystick *joystick)
     return capabilities;
 }
 
-static int WII_JoystickSetLED(SDL_Joystick *joystick,
+static int OGC_JoystickSetLED(SDL_Joystick *joystick,
                               Uint8 red, Uint8 green, Uint8 blue)
 {
     return SDL_Unsupported();
 }
 
-static int WII_JoystickSendEffect(SDL_Joystick *joystick,
+static int OGC_JoystickSendEffect(SDL_Joystick *joystick,
                                   const void *data, int size)
 {
     return SDL_Unsupported();
 }
 
-static int WII_JoystickSetSensorsEnabled(SDL_Joystick *joystick, SDL_bool enabled)
+static int OGC_JoystickSetSensorsEnabled(SDL_Joystick *joystick, SDL_bool enabled)
 {
     return SDL_Unsupported();
 }
@@ -992,7 +1003,7 @@ static void _HandleGCJoystickUpdate(SDL_Joystick *joystick)
     }
 }
 
-static void WII_JoystickUpdate(SDL_Joystick *joystick)
+static void OGC_JoystickUpdate(SDL_Joystick *joystick)
 {
     if (!joystick || !joystick->hwdata)
         return;
@@ -1007,7 +1018,7 @@ static void WII_JoystickUpdate(SDL_Joystick *joystick)
     }
 }
 
-static void WII_JoystickClose(SDL_Joystick *joystick)
+static void OGC_JoystickClose(SDL_Joystick *joystick)
 {
     if (!joystick || !joystick->hwdata) // joystick already closed
         return;
@@ -1016,11 +1027,11 @@ static void WII_JoystickClose(SDL_Joystick *joystick)
     joystick->hwdata = NULL;
 }
 
-void WII_JoystickQuit(void)
+void OGC_JoystickQuit(void)
 {
 }
 
-static SDL_bool WII_JoystickGetGamepadMapping(int device_index,
+static SDL_bool OGC_JoystickGetGamepadMapping(int device_index,
                                               SDL_GamepadMapping *out)
 {
     int index = device_index_to_joypad_index(device_index);
@@ -1191,29 +1202,29 @@ static SDL_bool WII_JoystickGetGamepadMapping(int device_index,
     return is_gamepad;
 }
 
-SDL_JoystickDriver SDL_WII_JoystickDriver = {
-    .Init = WII_JoystickInit,
-    .GetCount = WII_JoystickGetCount,
-    .Detect = WII_JoystickDetect,
-    .GetDeviceName = WII_JoystickGetDeviceName,
-    .GetDevicePath = WII_JoystickGetDevicePath,
-    .GetDevicePlayerIndex = WII_JoystickGetDevicePlayerIndex,
-    .SetDevicePlayerIndex = WII_JoystickSetDevicePlayerIndex,
-    .GetDeviceGUID = WII_JoystickGetDeviceGUID,
-    .GetDeviceInstanceID = WII_JoystickGetDeviceInstanceID,
-    .Open = WII_JoystickOpen,
-    .Rumble = WII_JoystickRumble,
-    .RumbleTriggers = WII_JoystickRumbleTriggers,
-    .GetCapabilities = WII_JoystickGetCapabilities,
-    .SetLED = WII_JoystickSetLED,
-    .SendEffect = WII_JoystickSendEffect,
-    .SetSensorsEnabled = WII_JoystickSetSensorsEnabled,
-    .Update = WII_JoystickUpdate,
-    .Close = WII_JoystickClose,
-    .Quit = WII_JoystickQuit,
-    .GetGamepadMapping = WII_JoystickGetGamepadMapping
+SDL_JoystickDriver SDL_OGC_JoystickDriver = {
+    .Init = OGC_JoystickInit,
+    .GetCount = OGC_JoystickGetCount,
+    .Detect = OGC_JoystickDetect,
+    .GetDeviceName = OGC_JoystickGetDeviceName,
+    .GetDevicePath = OGC_JoystickGetDevicePath,
+    .GetDevicePlayerIndex = OGC_JoystickGetDevicePlayerIndex,
+    .SetDevicePlayerIndex = OGC_JoystickSetDevicePlayerIndex,
+    .GetDeviceGUID = OGC_JoystickGetDeviceGUID,
+    .GetDeviceInstanceID = OGC_JoystickGetDeviceInstanceID,
+    .Open = OGC_JoystickOpen,
+    .Rumble = OGC_JoystickRumble,
+    .RumbleTriggers = OGC_JoystickRumbleTriggers,
+    .GetCapabilities = OGC_JoystickGetCapabilities,
+    .SetLED = OGC_JoystickSetLED,
+    .SendEffect = OGC_JoystickSendEffect,
+    .SetSensorsEnabled = OGC_JoystickSetSensorsEnabled,
+    .Update = OGC_JoystickUpdate,
+    .Close = OGC_JoystickClose,
+    .Quit = OGC_JoystickQuit,
+    .GetGamepadMapping = OGC_JoystickGetGamepadMapping
 };
 
-#endif /* SDL_JOYSTICK_WII */
+#endif /* SDL_JOYSTICK_OGC */
 
 /* vi: set sts=4 ts=4 sw=4 expandtab: */
