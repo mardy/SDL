@@ -537,7 +537,7 @@ static int OGC_JoystickOpen(SDL_Joystick *joystick, int device_index)
 #ifdef __wii__
     } else {
         if (split_joysticks) {
-            if (index < MAX_GC_JOYSTICKS + MAX_WII_JOYSTICKS) {
+            if (index < WII_WIIMOTES_END) {
                 // wiimote
                 joystick->nbuttons = SDL_WII_NUM_BUTTONS_WIIMOTE;
                 joystick->naxes = 3;
