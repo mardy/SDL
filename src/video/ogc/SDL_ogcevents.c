@@ -22,8 +22,7 @@
 
 #ifdef SDL_VIDEO_DRIVER_OGC
 
-/* Being a null driver, there's no event stream. We just define stubs for
-   most of the API. */
+#include "SDL.h"
 
 #include "../../events/SDL_events_c.h"
 
@@ -31,10 +30,54 @@
 #include "SDL_ogcvideo.h"
 
 #include <ogc/system.h>
+#include <wiiuse/wpad.h>
 
 /* These variables can be set from the handlers registered in SDL_main() */
 bool OGC_PowerOffRequested = false;
 bool OGC_ResetRequested = false;
+
+#ifdef __wii__
+#define MAX_WII_MOUSE_BUTTONS 2
+static const struct {
+    int wii;
+    int mouse;
+} s_mouse_button_map[MAX_WII_MOUSE_BUTTONS] = {
+    { WPAD_BUTTON_B, SDL_BUTTON_LEFT },
+    { WPAD_BUTTON_A, SDL_BUTTON_RIGHT },
+};
+
+static void pump_ir_events(_THIS)
+{
+    if (!_this->windows) return;
+
+    if (!SDL_WasInit(SDL_INIT_JOYSTICK)) {
+        /* Get events from WPAD; we don't need to do this if the joystick
+         * system was initialized, because in that case this operation is done
+         * there at every event loop iteration. */
+        WPAD_ReadPending(WPAD_CHAN_ALL, NULL);
+    }
+
+    for (int i = 0; i < 4; i++) {
+        WPADData *data = WPAD_Data(i);
+
+        if (!data->ir.smooth_valid) continue;
+
+        SDL_SendMouseMotion(_this->windows, i,
+                            0, data->ir.sx, data->ir.sy);
+
+        for (int b = 0; b < MAX_WII_MOUSE_BUTTONS; b++) {
+            if (data->btns_d & s_mouse_button_map[b].wii) {
+                SDL_SendMouseButton(_this->windows, i,
+                                    SDL_PRESSED, s_mouse_button_map[b].mouse);
+            }
+            if (data->btns_u & s_mouse_button_map[b].wii) {
+                SDL_SendMouseButton(_this->windows, i,
+                                    SDL_RELEASED, s_mouse_button_map[b].mouse);
+            }
+        }
+    }
+}
+#endif
 
 void OGC_PumpEvents(_THIS)
 {
@@ -46,6 +89,10 @@ void OGC_PumpEvents(_THIS)
             SYS_ResetSystem(SYS_POWEROFF, 0, 0);
         }
     }
+
+#ifdef __wii__
+    pump_ir_events(_this);
+#endif
 }
 
 #endif /* SDL_VIDEO_DRIVER_OGC */
