@@ -101,6 +101,7 @@ typedef struct joystick_wpaddata_t
 typedef struct joystick_hwdata
 {
     int index;
+    char sensors_disabled;
     /*  This must be big enough for MAX_RUMBLE */
     char rumble_intensity;
     u16 rumble_loop;
@@ -542,17 +543,30 @@ static int OGC_JoystickOpen(SDL_Joystick *joystick, int device_index)
                 joystick->nbuttons = SDL_WII_NUM_BUTTONS_WIIMOTE;
                 joystick->naxes = 3;
                 joystick->nhats = 1;
+                SDL_PrivateJoystickAddSensor(joystick, SDL_SENSOR_ACCEL, 100.0f);
             } else {
                 // expansion
                 joystick->nbuttons = SDL_max(SDL_WII_NUM_BUTTONS_NUNCHUCK,
                                              SDL_WII_NUM_BUTTONS_CLASSIC);
                 joystick->naxes = 6;
                 joystick->nhats = 1;
+                if (s_detected_devices[index] == 1 + WPAD_EXP_NUNCHUK) {
+                    SDL_PrivateJoystickAddSensor(joystick, SDL_SENSOR_ACCEL_L, 100.0f);
+                }
             }
         } else {
             joystick->nbuttons = MAX_WII_BUTTONS;
             joystick->naxes = MAX_WII_AXES;
             joystick->nhats = MAX_WII_HATS;
+            /* Add the accelerometer only if there is no expansion connected */
+            if (s_detected_devices[index] == 1) {
+                SDL_PrivateJoystickAddSensor(joystick, SDL_SENSOR_ACCEL, 100.0f);
+            } else if (s_detected_devices[index] == 1 + WPAD_EXP_NUNCHUK) {
+                /* Or, if the nunchuck is connected, add the wiimote, and the
+                 * nunchuk on the left */
+                SDL_PrivateJoystickAddSensor(joystick, SDL_SENSOR_ACCEL, 100.0f);
+                SDL_PrivateJoystickAddSensor(joystick, SDL_SENSOR_ACCEL_L, 100.0f);
+            }
         }
 #endif
     }
@@ -625,6 +639,11 @@ static int OGC_JoystickSendEffect(SDL_Joystick *joystick,
 
 static int OGC_JoystickSetSensorsEnabled(SDL_Joystick *joystick, SDL_bool enabled)
 {
+    int index = joystick->hwdata->index;
+    if (index >= WII_WIIMOTES_START && index < WII_WIIMOTES_END) {
+        joystick->hwdata->sensors_disabled = !enabled;
+        return 0;
+    }
     return SDL_Unsupported();
 }
 
@@ -776,6 +795,34 @@ static void HandleWiiMotion(SDL_Joystick *joystick,
         SDL_PrivateJoystickAxis(joystick, start_index + 2, axis << 8);
         prev_state->wiimote.wiimote_yaw = axis;
     }
+}
+
+static void HandleNunchuckSensors(SDL_Joystick *joystick,
+                                  const nunchuk_t *data)
+{
+    float values[3];
+    SDL_SensorType type;
+
+    if (joystick->hwdata->sensors_disabled) return;
+
+    type = split_joysticks ? SDL_SENSOR_ACCEL : SDL_SENSOR_ACCEL_L;
+    values[0] = data->gforce.x * SDL_STANDARD_GRAVITY;
+    values[1] = data->gforce.z * SDL_STANDARD_GRAVITY;
+    values[2] = -data->gforce.y * SDL_STANDARD_GRAVITY;
+    SDL_PrivateJoystickSensor(joystick, type, 0, values, 3);
+}
+
+static void HandleWiimoteSensors(SDL_Joystick *joystick,
+                                 WPADData *data)
+{
+    float values[3];
+
+    if (joystick->hwdata->sensors_disabled) return;
+
+    values[0] = data->gforce.x * SDL_STANDARD_GRAVITY;
+    values[1] = data->gforce.z * SDL_STANDARD_GRAVITY;
+    values[2] = -data->gforce.y * SDL_STANDARD_GRAVITY;
+    SDL_PrivateJoystickSensor(joystick, SDL_SENSOR_ACCEL, 0, values, 3);
 }
 
 static void _HandleWiiJoystickUpdate(SDL_Joystick *joystick)
@@ -945,6 +992,8 @@ static void _HandleWiiJoystickUpdate(SDL_Joystick *joystick)
                 SDL_PrivateJoystickAxis(joystick, 1, axis);
                 prev_state->wiimote.nunchuk_stickY = axis;
             }
+
+            HandleNunchuckSensors(joystick, &data->exp.nunchuk);
         }
     }
 
@@ -955,6 +1004,7 @@ static void _HandleWiiJoystickUpdate(SDL_Joystick *joystick)
             int start_index = split_joysticks ? 0 : 6;
             HandleWiiMotion(joystick, prev_state, data, start_index);
         }
+        HandleWiimoteSensors(joystick, data);
     }
 }
 #endif /* __wii__ */
