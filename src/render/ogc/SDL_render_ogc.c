@@ -145,27 +145,29 @@ int OGC_RenderPrimitive(SDL_Renderer *renderer, u8 primitive,
 {
     const size_t count = cmd->data.draw.count;
     const SDL_FPoint *verts = (SDL_FPoint *)(vertices + cmd->data.draw.first);
+    GXColor c = {
+        cmd->data.draw.r,
+        cmd->data.draw.g,
+        cmd->data.draw.b,
+        cmd->data.draw.a
+    };
 
-    const Uint8 r = cmd->data.draw.r;
-    const Uint8 g = cmd->data.draw.g;
-    const Uint8 b = cmd->data.draw.b;
-    const Uint8 a = cmd->data.draw.a;
     OGC_SetBlendMode(renderer, cmd->data.draw.blend);
 
-    /* TODO: optimize state changes. We can probably avoid passing the color,
-     * if we set it on a register using GX_SetTevColor(). */
-    GX_SetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
+    /* TODO: optimize state changes. */
+    GX_SetTevColor(GX_TEVREG0, c);
+    GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_C0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO);
+    GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_A0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO);
+    GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+    GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 
     GX_ClearVtxDesc();
     GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
-    GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
     GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XY, GX_F32, 0);
-    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
 
     GX_Begin(primitive, GX_VTXFMT0, count);
     for (int i = 0; i < count; i++) {
         GX_Position2f32(verts[i].x, verts[i].y);
-        GX_Color4u8(r, g, b, a);
     }
     GX_End();
 
