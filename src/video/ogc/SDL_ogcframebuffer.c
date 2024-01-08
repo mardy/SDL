@@ -94,7 +94,6 @@ int SDL_OGC_CreateWindowFramebuffer(_THIS, SDL_Window *window, Uint32 *format, v
 
 int SDL_OGC_UpdateWindowFramebuffer(_THIS, SDL_Window *window, const SDL_Rect *rects, int numrects)
 {
-    SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
     SDL_WindowData *windowdata = (SDL_WindowData *)window->driverdata;
     u8 gx_format;
 
@@ -105,12 +104,7 @@ int SDL_OGC_UpdateWindowFramebuffer(_THIS, SDL_Window *window, const SDL_Rect *r
     draw_screen_rect(window);
     GX_DrawDone();
 
-    GX_CopyDisp(videodata->xfb[0], GX_TRUE);
-    GX_DrawDone();
-    GX_Flush();
-
-    VIDEO_Flush();
-    VIDEO_WaitVSync();
+    OGC_VideoFlip(window);
 
     return 0;
 }
