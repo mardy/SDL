@@ -172,6 +172,19 @@ void OGC_VideoQuit(_THIS)
         free(MEM_K1_TO_K0(videodata->xfb[1]));
 }
 
+void OGC_VideoFlip(SDL_Window *window)
+{
+    SDL_VideoDevice *_this = SDL_GetVideoDevice();
+    SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
+
+    GX_CopyDisp(videodata->xfb[0], GX_TRUE);
+    GX_DrawDone();
+    GX_Flush();
+
+    VIDEO_Flush();
+    VIDEO_WaitVSync();
+}
+
 #endif /* SDL_VIDEO_DRIVER_OGC */
 
 /* vi: set ts=4 sw=4 expandtab: */

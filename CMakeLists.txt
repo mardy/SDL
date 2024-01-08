@@ -2972,8 +2972,10 @@ elseif(OGC)
 
   if(SDL_VIDEO)
     set(SDL_VIDEO_DRIVER_OGC 1)
-    file(GLOB OGC_VIDEO_SOURCES ${SDL2_SOURCE_DIR}/src/video/ogc/*.c)
+    set(SDL_VIDEO_RENDER_OGC 1)
+    file(GLOB OGC_VIDEO_SOURCES ${SDL2_SOURCE_DIR}/src/video/ogc/*.c ${SDL2_SOURCE_DIR}/src/render/ogc/*.c)
     list(APPEND SOURCE_FILES ${OGC_VIDEO_SOURCES})
+    set(SDL_VIDEO_OPENGL 0)
     set(HAVE_SDL_VIDEO TRUE)
   endif()
 

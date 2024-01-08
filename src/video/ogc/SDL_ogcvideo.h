@@ -41,6 +41,8 @@ typedef struct SDL_WindowData
     SDL_PixelFormatEnum surface_format;
 } SDL_WindowData;
 
+void OGC_VideoFlip(SDL_Window *window);
+
 #endif /* SDL_ogcvideo_h_ */
 
 /* vi: set ts=4 sw=4 expandtab: */
