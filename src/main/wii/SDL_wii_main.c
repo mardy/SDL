@@ -76,7 +76,13 @@ int main(int argc, char *argv[])
     // TODO KEYBOARD_Init(NULL);
     fatInitDefault();
 
-    /* Call the user's main function */
+    /* Call the user's main function. Make sure that argv contains at least one
+     * element. */
+    if (!argv || argv[0] == NULL) {
+        static const char *dummy_argv[2] = { "app", NULL };
+        argc = 1;
+        argv = (char**)dummy_argv;
+    }
     return SDL_main(argc, argv);
 }
 
