@@ -96,6 +96,30 @@ static int OGC_QueueDrawPoints(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
     return 0;
 }
 
+static int OGC_QueueFillRects(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
+                               const SDL_FRect *rects, int count)
+{
+    size_t size = count * sizeof(SDL_FPoint) * 4;
+    SDL_FPoint *vertices = SDL_AllocateRenderVertices(renderer, size,
+                                                      4, &cmd->data.draw.first);
+    if (!vertices) {
+        return -1;
+    }
+
+    cmd->data.draw.count = count;
+    for (int i = 0; i < count; i++) {
+        vertices[i].x = rects[i].x;
+        vertices[i].y = rects[i].y;
+        vertices[i+1].x = rects[i].x + rects[i].w;
+        vertices[i+1].y = rects[i].y;
+        vertices[i+2].x = rects[i].x + rects[i].w;
+        vertices[i+2].y = rects[i].y + rects[i].h;
+        vertices[i+3].x = rects[i].x;
+        vertices[i+3].y = rects[i].y + rects[i].h;
+    }
+    return 0;
+}
+
 static int OGC_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture,
                              const float *xy, int xy_stride, const SDL_Color *color, int color_stride, const float *uv, int uv_stride,
                              int num_vertices, const void *indices, int num_indices, int size_indices,
@@ -143,7 +167,7 @@ static int OGC_RenderGeometry(SDL_Renderer *renderer, void *vertices, SDL_Render
 int OGC_RenderPrimitive(SDL_Renderer *renderer, u8 primitive,
                         void *vertices, SDL_RenderCommand *cmd)
 {
-    const size_t count = cmd->data.draw.count;
+    size_t count = cmd->data.draw.count;
     const SDL_FPoint *verts = (SDL_FPoint *)(vertices + cmd->data.draw.first);
     GXColor c = {
         cmd->data.draw.r,
@@ -164,6 +188,8 @@ int OGC_RenderPrimitive(SDL_Renderer *renderer, u8 primitive,
     GX_ClearVtxDesc();
     GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
     GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XY, GX_F32, 0);
+
+    if (primitive == GX_QUADS) count *= 4;
 
     GX_Begin(primitive, GX_VTXFMT0, count);
     for (int i = 0; i < count; i++) {
@@ -196,7 +222,8 @@ static int OGC_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
         case SDL_RENDERCMD_DRAW_LINES:
             OGC_RenderPrimitive(renderer, GX_LINESTRIP, vertices, cmd);
             break;
-        case SDL_RENDERCMD_FILL_RECTS: /* unused */
+        case SDL_RENDERCMD_FILL_RECTS:
+            OGC_RenderPrimitive(renderer, GX_QUADS, vertices, cmd);
             break;
         case SDL_RENDERCMD_COPY: /* unused */
             break;
@@ -276,6 +303,7 @@ static SDL_Renderer *OGC_CreateRenderer(SDL_Window *window, Uint32 flags)
     renderer->QueueSetDrawColor = OGC_QueueSetViewport;
     renderer->QueueDrawPoints = OGC_QueueDrawPoints;
     renderer->QueueDrawLines = OGC_QueueDrawPoints;
+    renderer->QueueFillRects = OGC_QueueFillRects;
     renderer->QueueGeometry = OGC_QueueGeometry;
     renderer->RunCommandQueue = OGC_RunCommandQueue;
     renderer->RenderReadPixels = OGC_RenderReadPixels;
