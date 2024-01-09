@@ -244,6 +244,7 @@ static int OGC_RenderClear(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
         cmd->data.color.a
     };
 
+    GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
     GX_SetNumTevStages(1);
     /* TODO: optimize state changes. */
     GX_SetTevColor(GX_TEVREG0, c);
@@ -268,7 +269,23 @@ static int OGC_RenderClear(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 
 static void OGC_SetBlendMode(SDL_Renderer *renderer, int blendMode)
 {
-    // TODO
+    switch (blendMode) {
+    case SDL_BLENDMODE_NONE:
+        GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+        break;
+    case SDL_BLENDMODE_BLEND:
+        GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+        break;
+    case SDL_BLENDMODE_ADD:
+        GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_ONE, GX_LO_CLEAR);
+        break;
+    case SDL_BLENDMODE_MOD:
+        GX_SetBlendMode(GX_BM_BLEND, GX_BL_DSTCLR, GX_BL_ZERO, GX_LO_CLEAR);
+        break;
+    case SDL_BLENDMODE_MUL:
+        GX_SetBlendMode(GX_BM_BLEND, GX_BL_DSTCLR, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+        break;
+    }
 }
 
 static int OGC_RenderGeometry(SDL_Renderer *renderer, void *vertices,
@@ -303,29 +320,7 @@ static int OGC_RenderGeometry(SDL_Renderer *renderer, void *vertices,
 
         GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
         GX_SetTevOrder(stage, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
-        switch (cmd->data.draw.blend) {
-        case SDL_BLENDMODE_BLEND:
-            GX_SetTevOp(stage, GX_MODULATE);
-            break;
-        case SDL_BLENDMODE_MOD:
-            GX_SetTevColorIn(stage, GX_CC_ZERO, GX_CC_RASC, GX_CC_TEXC, GX_CC_ZERO);
-            GX_SetTevAlphaIn(stage, GX_CA_RASA, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO);
-            break;
-        case SDL_BLENDMODE_NONE:
-            /* With SDL_BLENDMODE_NONE the transparent pixels are first
-             * converted to black, so let's use two stages:
-             * 1) For color, we blend the texture color with black, using the
-             *    texture alpha as factor. For alpha, we generate full opacity
-             * 2) We blend the result from stage 1 with the rasterizer
-             */
-            GX_SetTevColorIn(stage, GX_CC_ZERO, GX_CC_TEXC, GX_CC_TEXA, GX_CC_ZERO);
-            GX_SetTevAlphaIn(stage, GX_CA_RASA, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO);
-            stage++;
-            GX_SetTevOrder(stage, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
-            GX_SetTevColorIn(stage, GX_CC_ZERO, GX_CC_RASC, GX_CC_CPREV, GX_CC_ZERO);
-            GX_SetTevAlphaIn(stage, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_APREV);
-            break;
-        }
+        GX_SetTevOp(stage, GX_MODULATE);
         GX_SetNumTevStages(stage - GX_TEVSTAGE0 + 1);
     } else {
         GX_SetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
