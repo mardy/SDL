@@ -43,6 +43,7 @@ typedef struct
     void *texels;
     u16 pitch;
     u8 format;
+    u8 needed_stages; // Normally 1, set to 2 for palettized formats
 } OGC_TextureData;
 
 static void OGC_WindowEvent(SDL_Renderer *renderer, const SDL_WindowEvent *event)
@@ -60,6 +61,7 @@ static int OGC_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     }
 
     ogc_tex->format = OGC_texture_format_from_SDL(texture->format);
+    ogc_tex->needed_stages = (ogc_tex->format == GX_TF_CI8) ? 2 : 1;
     texture_size = GX_GetTexBufferSize(texture->w, texture->h, ogc_tex->format,
                                        GX_FALSE, 0);
     ogc_tex->texels = memalign(32, texture_size);
@@ -242,6 +244,7 @@ static int OGC_RenderClear(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
         cmd->data.color.a
     };
 
+    GX_SetNumTevStages(1);
     /* TODO: optimize state changes. */
     GX_SetTevColor(GX_TEVREG0, c);
     GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_C0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO);
@@ -291,16 +294,39 @@ static int OGC_RenderGeometry(SDL_Renderer *renderer, void *vertices,
     GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XY, GX_F32, 0);
     GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
     if (texture) {
+        OGC_TextureData *ogc_tex = texture->driverdata;
+        u8 stage = GX_TEVSTAGE0 + ogc_tex->needed_stages - 1;
+
         GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
         GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
         GX_SetNumTexGens(1);
-        GX_SetNumChans(1);
-        GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_VTX, GX_SRC_VTX, 0,
-                       GX_DF_NONE, GX_AF_NONE);
 
         GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
-        GX_SetTevOp(GX_TEVSTAGE0, GX_MODULATE);
-        GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
+        GX_SetTevOrder(stage, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
+        switch (cmd->data.draw.blend) {
+        case SDL_BLENDMODE_BLEND:
+            GX_SetTevOp(stage, GX_MODULATE);
+            break;
+        case SDL_BLENDMODE_MOD:
+            GX_SetTevColorIn(stage, GX_CC_ZERO, GX_CC_RASC, GX_CC_TEXC, GX_CC_ZERO);
+            GX_SetTevAlphaIn(stage, GX_CA_RASA, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO);
+            break;
+        case SDL_BLENDMODE_NONE:
+            /* With SDL_BLENDMODE_NONE the transparent pixels are first
+             * converted to black, so let's use two stages:
+             * 1) For color, we blend the texture color with black, using the
+             *    texture alpha as factor. For alpha, we generate full opacity
+             * 2) We blend the result from stage 1 with the rasterizer
+             */
+            GX_SetTevColorIn(stage, GX_CC_ZERO, GX_CC_TEXC, GX_CC_TEXA, GX_CC_ZERO);
+            GX_SetTevAlphaIn(stage, GX_CA_RASA, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO);
+            stage++;
+            GX_SetTevOrder(stage, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
+            GX_SetTevColorIn(stage, GX_CC_ZERO, GX_CC_RASC, GX_CC_CPREV, GX_CC_ZERO);
+            GX_SetTevAlphaIn(stage, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_APREV);
+            break;
+        }
+        GX_SetNumTevStages(stage - GX_TEVSTAGE0 + 1);
     } else {
         GX_SetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
     }
