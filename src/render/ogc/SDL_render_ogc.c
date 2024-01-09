@@ -235,7 +235,31 @@ static int OGC_RenderSetDrawColor(SDL_Renderer *renderer, SDL_RenderCommand *cmd
 
 static int OGC_RenderClear(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 {
-    // TODO
+    GXColor c = {
+        cmd->data.color.r,
+        cmd->data.color.g,
+        cmd->data.color.b,
+        cmd->data.color.a
+    };
+
+    /* TODO: optimize state changes. */
+    GX_SetTevColor(GX_TEVREG0, c);
+    GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_C0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO);
+    GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_A0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO);
+    GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+    GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+
+    GX_ClearVtxDesc();
+    GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XY, GX_S16, 0);
+
+    GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
+    GX_Position2s16(0, 0);
+    GX_Position2s16(renderer->window->w, 0);
+    GX_Position2s16(renderer->window->w, renderer->window->h);
+    GX_Position2s16(0, renderer->window->h);
+    GX_End();
+
     return 0;
 }
 
