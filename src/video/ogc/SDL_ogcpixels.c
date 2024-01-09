@@ -313,4 +313,9 @@ void OGC_pixels_from_texture(void *pixels, const SDL_PixelFormatEnum format,
     }
 }
 
+u8 OGC_texture_format_from_SDL(const SDL_PixelFormatEnum format)
+{
+    return texture_format_from_SDL(format);
+}
+
 /* vi: set ts=4 sw=4 expandtab: */

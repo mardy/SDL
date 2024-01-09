@@ -34,6 +34,8 @@ void OGC_pixels_from_texture(void *pixels, SDL_PixelFormatEnum format,
                              int16_t w, int16_t h, int16_t pitch,
                              void *texels);
 
+u8 OGC_texture_format_from_SDL(const SDL_PixelFormatEnum format);
+
 #endif /* SDL_ogcpixels_h_ */
 
 /* vi: set ts=4 sw=4 expandtab: */
