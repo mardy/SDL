@@ -33,6 +33,9 @@
 #include <ogc/gx.h>
 #include <ogc/video.h>
 
+#define MAX_EFB_WIDTH 640
+#define MAX_EFB_HEIGHT 528
+
 typedef struct
 {
     SDL_BlendMode current_blend_mode;
@@ -82,6 +85,16 @@ static inline void OGC_SetBlendMode(SDL_Renderer *renderer, SDL_BlendMode blend_
     }
 
     data->current_blend_mode = blend_mode;
+}
+
+static void save_efb_to_texture(SDL_Renderer *renderer)
+{
+    SDL_Texture *texture = renderer->target;
+    OGC_TextureData *ogc_tex = texture->driverdata;
+
+    GX_SetTexCopySrc(0, 0, texture->w, texture->h);
+    GX_SetTexCopyDst(texture->w, texture->h, ogc_tex->format, GX_FALSE);
+    GX_CopyTex(ogc_tex->texels, GX_TRUE);
 }
 
 static int OGC_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
@@ -140,6 +153,26 @@ static void OGC_SetTextureScaleMode(SDL_Renderer *renderer, SDL_Texture *texture
 
 static int OGC_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
 {
+    OGC_RenderData *data = renderer->driverdata;
+
+    if (texture) {
+        if (texture->w > MAX_EFB_WIDTH || texture->h > MAX_EFB_HEIGHT) {
+            return SDL_SetError("Render target bigger than EFB");
+        }
+
+        if (data->ops_after_present > 0) {
+            /* We should save the current EFB contents into the window data.
+             * However, it's unclear whether this is a possible scenario, since
+             * all actual drawing happens in RunCommandQueue() and this method
+             * will not be called in between of the drawing operations; but
+             * just to be on the safe side, log a warning. We can come back to
+             * this later and implement the EFB saving if we see that this
+             * happens in real life.
+             */
+            SDL_LogWarn(SDL_LOG_CATEGORY_RENDER,
+                        "Render target set after drawing!");
+        }
+    }
     return 0;
 }
 
@@ -425,6 +458,11 @@ static int OGC_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
         }
         cmd = cmd->next;
     }
+
+    if (renderer->target) {
+        save_efb_to_texture(renderer);
+    }
+
     return 0;
 }
 
