@@ -309,12 +309,6 @@ static int OGC_RenderGeometry(SDL_Renderer *renderer, void *vertices,
     OGC_SetBlendMode(renderer, cmd->data.draw.blend);
 
     size_per_element = sizeof(SDL_FPoint) + sizeof(SDL_Color);
-    if (texture) {
-        size_per_element += sizeof(SDL_FPoint);
-        OGC_TextureData *ogc_tex = texture->driverdata;
-        OGC_load_texture(ogc_tex->texels, texture->w, texture->h,
-                         ogc_tex->format);
-    }
 
     GX_ClearVtxDesc();
     GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
@@ -323,7 +317,12 @@ static int OGC_RenderGeometry(SDL_Renderer *renderer, void *vertices,
     GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
     if (texture) {
         OGC_TextureData *ogc_tex = texture->driverdata;
-        u8 stage = GX_TEVSTAGE0 + ogc_tex->needed_stages - 1;
+        u8 stage;
+
+        size_per_element += sizeof(SDL_FPoint);
+        OGC_load_texture(ogc_tex->texels, texture->w, texture->h,
+                         ogc_tex->format);
+        stage = GX_TEVSTAGE0 + ogc_tex->needed_stages - 1;
 
         GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
         GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
