@@ -36,6 +36,8 @@
 typedef struct
 {
     SDL_BlendMode current_blend_mode;
+    GXColor clear_color;
+    int ops_after_present;
 } OGC_RenderData;
 
 typedef struct
@@ -269,6 +271,8 @@ static int OGC_RenderSetDrawColor(SDL_Renderer *renderer, SDL_RenderCommand *cmd
 
 static int OGC_RenderClear(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 {
+    OGC_RenderData *data = renderer->driverdata;
+
     GXColor c = {
         cmd->data.color.r,
         cmd->data.color.g,
@@ -276,25 +280,16 @@ static int OGC_RenderClear(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
         cmd->data.color.a
     };
 
-    GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
-    GX_SetNumTevStages(1);
-    /* TODO: optimize state changes. */
-    GX_SetTevColor(GX_TEVREG0, c);
-    GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_C0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO);
-    GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_A0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO);
-    GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-    GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+    /* If nothing has been drawn after Present, and if the clear color has not
+     * changed, there's no need to do anything here. */
+    if (data->ops_after_present == 0 &&
+        GX_COLOR_AS_U32(c) == GX_COLOR_AS_U32(data->clear_color)) {
+        return 0;
+    }
 
-    GX_ClearVtxDesc();
-    GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
-    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XY, GX_S16, 0);
-
-    GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
-    GX_Position2s16(0, 0);
-    GX_Position2s16(renderer->window->w, 0);
-    GX_Position2s16(renderer->window->w, renderer->window->h);
-    GX_Position2s16(0, renderer->window->h);
-    GX_End();
+    data->clear_color = c;
+    GX_SetCopyClear(c, GX_MAX_Z24);
+    GX_CopyDisp(OGC_video_get_xfb(SDL_GetVideoDevice()), GX_TRUE);
 
     return 0;
 }
@@ -302,10 +297,12 @@ static int OGC_RenderClear(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 static int OGC_RenderGeometry(SDL_Renderer *renderer, void *vertices,
                               SDL_RenderCommand *cmd)
 {
+    OGC_RenderData *data = renderer->driverdata;
     const size_t count = cmd->data.draw.count;
     SDL_Texture *texture = cmd->data.draw.texture;
     size_t size_per_element;
 
+    data->ops_after_present++;
     OGC_SetBlendMode(renderer, cmd->data.draw.blend);
 
     size_per_element = sizeof(SDL_FPoint) + sizeof(SDL_Color);
@@ -356,6 +353,7 @@ static int OGC_RenderGeometry(SDL_Renderer *renderer, void *vertices,
 int OGC_RenderPrimitive(SDL_Renderer *renderer, u8 primitive,
                         void *vertices, SDL_RenderCommand *cmd)
 {
+    OGC_RenderData *data = renderer->driverdata;
     size_t count = cmd->data.draw.count;
     const SDL_FPoint *verts = (SDL_FPoint *)(vertices + cmd->data.draw.first);
     GXColor c = {
@@ -365,6 +363,7 @@ int OGC_RenderPrimitive(SDL_Renderer *renderer, u8 primitive,
         cmd->data.draw.a
     };
 
+    data->ops_after_present++;
     OGC_SetBlendMode(renderer, cmd->data.draw.blend);
 
     /* TODO: optimize state changes. */
@@ -439,7 +438,9 @@ static int OGC_RenderPresent(SDL_Renderer *renderer)
 {
     GX_DrawDone();
 
-    OGC_VideoFlip(renderer->window);
+    OGC_video_flip(SDL_GetVideoDevice());
+
+    data->ops_after_present = 0;
     return 0;
 }
 
