@@ -418,6 +418,13 @@ int OGC_RenderPrimitive(SDL_Renderer *renderer, u8 primitive,
     }
     GX_End();
 
+    /* The last point is not drawn */
+    if (primitive == GX_LINESTRIP) {
+        GX_Begin(GX_POINTS, GX_VTXFMT0, 1);
+        GX_Position2f32(verts[count - 1].x, verts[count - 1].y);
+        GX_End();
+    }
+
     return 0;
 }
 
