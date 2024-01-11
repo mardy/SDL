@@ -286,7 +286,13 @@ static int OGC_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL
 
 static int OGC_RenderSetViewPort(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 {
-    // TODO
+    OGC_RenderData *data = (OGC_RenderData *)renderer->driverdata;
+    const SDL_Rect *viewport = &cmd->data.viewport.rect;
+
+    float v_aspect = viewport->h / 2.0;
+    float h_aspect = viewport->w / 2.0;
+    OGC_set_viewport(viewport->x, viewport->y, viewport->w, viewport->h,
+                     h_aspect, v_aspect);
     return 0;
 }
 
