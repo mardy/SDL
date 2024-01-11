@@ -172,12 +172,16 @@ void OGC_VideoQuit(_THIS)
         free(MEM_K1_TO_K0(videodata->xfb[1]));
 }
 
-void OGC_VideoFlip(SDL_Window *window)
+void *OGC_video_get_xfb(_THIS)
 {
-    SDL_VideoDevice *_this = SDL_GetVideoDevice();
-    SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
+    SDL_VideoData *videodata = _this->driverdata;
+    return videodata->xfb[0];
+}
 
-    GX_CopyDisp(videodata->xfb[0], GX_TRUE);
+void OGC_video_flip(_THIS)
+{
+    void *xfb = OGC_video_get_xfb(_this);
+    GX_CopyDisp(xfb, GX_TRUE);
     GX_DrawDone();
     GX_Flush();
 
