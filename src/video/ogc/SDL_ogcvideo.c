@@ -119,9 +119,6 @@ int OGC_VideoInit(_THIS)
     memset(videodata->gp_fifo, 0, DEFAULT_FIFO_SIZE);
     GX_Init(videodata->gp_fifo, DEFAULT_FIFO_SIZE);
 
-    GX_SetViewport(0, 0, vmode->fbWidth, vmode->efbHeight, 0, 1);
-    GX_SetScissor(0, 0, vmode->fbWidth, vmode->efbHeight);
-
     /* Setup the EFB -> XFB copy operation */
     GX_SetDispCopySrc(0, 0, vmode->fbWidth, vmode->efbHeight);
     GX_SetDispCopyDst(vmode->fbWidth, vmode->xfbHeight);
