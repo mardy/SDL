@@ -313,12 +313,6 @@ static int OGC_RenderSetClipRect(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
     return 0;
 }
 
-static int OGC_RenderSetDrawColor(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
-{
-    // TODO
-    return 0;
-}
-
 static int OGC_RenderClear(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 {
     OGC_RenderData *data = renderer->driverdata;
@@ -456,7 +450,8 @@ static int OGC_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
             OGC_RenderSetClipRect(renderer, cmd);
             break;
         case SDL_RENDERCMD_SETDRAWCOLOR:
-            OGC_RenderSetDrawColor(renderer, cmd);
+            /* This is a no-op, since every command carries the color, and
+             * setting it on the FIFO is not expensive. */
             break;
         case SDL_RENDERCMD_CLEAR:
             OGC_RenderClear(renderer, cmd);
