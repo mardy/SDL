@@ -104,7 +104,7 @@ int SDL_OGC_UpdateWindowFramebuffer(_THIS, SDL_Window *window, const SDL_Rect *r
     draw_screen_rect(window);
     GX_DrawDone();
 
-    OGC_video_flip(_this);
+    OGC_video_flip(_this, true);
 
     return 0;
 }
