@@ -42,7 +42,7 @@ typedef struct SDL_WindowData
 } SDL_WindowData;
 
 void *OGC_video_get_xfb(SDL_VideoDevice *device);
-void OGC_video_flip(SDL_VideoDevice *device);
+void OGC_video_flip(SDL_VideoDevice *device, bool vsync);
 
 #endif /* SDL_ogcvideo_h_ */
 

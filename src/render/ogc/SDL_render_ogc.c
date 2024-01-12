@@ -41,6 +41,7 @@ typedef struct
     SDL_BlendMode current_blend_mode;
     GXColor clear_color;
     int ops_after_present;
+    bool vsync;
 } OGC_RenderData;
 
 typedef struct
@@ -497,9 +498,11 @@ static int OGC_RenderReadPixels(SDL_Renderer *renderer, const SDL_Rect *rect,
 
 static int OGC_RenderPresent(SDL_Renderer *renderer)
 {
+    OGC_RenderData *data = renderer->driverdata;
+
     GX_DrawDone();
 
-    OGC_video_flip(SDL_GetVideoDevice());
+    OGC_video_flip(SDL_GetVideoDevice(), data->vsync);
 
     data->ops_after_present = 0;
     return 0;
@@ -529,6 +532,8 @@ static void OGC_DestroyRenderer(SDL_Renderer *renderer)
 
 static int OGC_SetVSync(SDL_Renderer *renderer, const int vsync)
 {
+    OGC_RenderData *data = (OGC_RenderData *)renderer->driverdata;
+    data->vsync = vsync ? 1 : 0;
     return 0;
 }
 
@@ -551,6 +556,7 @@ static SDL_Renderer *OGC_CreateRenderer(SDL_Window *window, Uint32 flags)
     }
 
     data->current_blend_mode = SDL_BLENDMODE_NONE;
+    data->vsync = true;
 
     renderer->WindowEvent = OGC_WindowEvent;
     renderer->CreateTexture = OGC_CreateTexture;

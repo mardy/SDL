@@ -175,7 +175,7 @@ void *OGC_video_get_xfb(_THIS)
     return videodata->xfb[0];
 }
 
-void OGC_video_flip(_THIS)
+void OGC_video_flip(_THIS, bool vsync)
 {
     void *xfb = OGC_video_get_xfb(_this);
     GX_CopyDisp(xfb, GX_TRUE);
@@ -183,7 +183,9 @@ void OGC_video_flip(_THIS)
     GX_Flush();
 
     VIDEO_Flush();
-    VIDEO_WaitVSync();
+    if (vsync) {
+        VIDEO_WaitVSync();
+    }
 }
 
 #endif /* SDL_VIDEO_DRIVER_OGC */
