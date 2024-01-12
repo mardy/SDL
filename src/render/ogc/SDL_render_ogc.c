@@ -298,7 +298,17 @@ static int OGC_RenderSetViewPort(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 
 static int OGC_RenderSetClipRect(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 {
-    // TODO
+    const SDL_Rect *rect = &cmd->data.cliprect.rect;
+
+    if (cmd->data.cliprect.enabled) {
+        GX_SetScissor(renderer->viewport.x + rect->x,
+                      renderer->viewport.y + rect->y,
+                      rect->w, rect->h);
+        GX_SetClipMode(GX_CLIP_ENABLE);
+    } else {
+        GX_SetClipMode(GX_CLIP_DISABLE);
+    }
+
     return 0;
 }
 
