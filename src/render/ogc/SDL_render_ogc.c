@@ -565,6 +565,11 @@ static SDL_Renderer *OGC_CreateRenderer(SDL_Window *window, Uint32 flags)
     renderer->driverdata = data;
     renderer->window = window;
 
+    if (!SDL_GetHint(SDL_HINT_RENDER_LINE_METHOD)) {
+        /* SDL sets the default one to point drawing, but we prefer lines */
+        SDL_SetHint(SDL_HINT_RENDER_LINE_METHOD, "2");
+    }
+
     return renderer;
 }
 
