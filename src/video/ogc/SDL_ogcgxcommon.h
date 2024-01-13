@@ -29,8 +29,6 @@
 
 void OGC_draw_init(int w, int h, int h_aspect, int v_aspect);
 void OGC_set_viewport(int x, int y, int w, int h, float h_aspect, float v_aspect);
-void OGC_prepare_texels(void *pixels, int w, int h, int pitch, Uint32 format,
-                        void *texels, u8 *gx_format);
 void OGC_load_texture(void *texels, int w, int h, u8 gx_format);
 
 #endif /* SDL_ogcgxcommon_h_ */

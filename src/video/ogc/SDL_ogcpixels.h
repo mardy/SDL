@@ -24,12 +24,13 @@
 #define SDL_ogcpixels_h_
 
 #include "SDL_pixels.h"
+#include "SDL_rect.h"
 
 #include <gctypes.h>
 
 void OGC_pixels_to_texture(void *pixels, SDL_PixelFormatEnum format,
-                           int16_t w, int16_t h, int16_t pitch,
-                           void *texels, u8 *gx_format);
+                           const SDL_Rect *rect, int16_t pitch,
+                           void *texels, int16_t tex_width);
 void OGC_pixels_from_texture(void *pixels, SDL_PixelFormatEnum format,
                              int16_t w, int16_t h, int16_t pitch,
                              void *texels);
