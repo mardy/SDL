@@ -25,6 +25,7 @@
 #include "../SDL_sysvideo.h"
 #include "SDL_ogcframebuffer_c.h"
 #include "SDL_ogcgxcommon.h"
+#include "SDL_ogcpixels.h"
 #include "SDL_ogcvideo.h"
 
 #include <malloc.h>
@@ -95,11 +96,18 @@ int SDL_OGC_CreateWindowFramebuffer(_THIS, SDL_Window *window, Uint32 *format, v
 int SDL_OGC_UpdateWindowFramebuffer(_THIS, SDL_Window *window, const SDL_Rect *rects, int numrects)
 {
     SDL_WindowData *windowdata = (SDL_WindowData *)window->driverdata;
+    u32 texture_size;
     u8 gx_format;
 
-    OGC_prepare_texels(windowdata->pixels, window->w, window->h, window->surface->pitch,
-                       windowdata->surface_format,
-                       windowdata->texels, &gx_format);
+    gx_format = OGC_texture_format_from_SDL(windowdata->surface_format);
+    for (int i = 0; i < numrects; i++) {
+        OGC_pixels_to_texture(windowdata->pixels, windowdata->surface_format, &rects[i],
+                              window->surface->pitch, windowdata->texels, window->w);
+    }
+    texture_size = GX_GetTexBufferSize(window->w, window->h, gx_format,
+                                       GX_FALSE, 0);
+    DCStoreRange(windowdata->texels, texture_size);
+    GX_InvalidateTexAll();
     OGC_load_texture(windowdata->texels, window->w, window->h, gx_format);
     draw_screen_rect(window);
     GX_DrawDone();

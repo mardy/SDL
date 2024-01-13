@@ -99,18 +99,6 @@ void OGC_draw_init(int w, int h, int h_aspect, int v_aspect)
     GX_InvVtxCache(); // update vertex cache
 }
 
-void OGC_prepare_texels(void *pixels, int w, int h, int pitch, Uint32 format,
-                        void *texels, u8 *gx_format)
-{
-    u32 texture_size;
-
-    OGC_pixels_to_texture(pixels, format, w, h, pitch,
-                          texels, gx_format);
-    texture_size = GX_GetTexBufferSize(w, h, *gx_format, GX_FALSE, 0);
-    DCStoreRange(texels, texture_size);
-    GX_InvalidateTexAll();
-}
-
 void OGC_load_texture(void *texels, int w, int h, u8 format)
 {
     GXTexObj texobj_a, texobj_b;

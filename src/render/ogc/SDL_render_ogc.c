@@ -30,6 +30,7 @@
 #include "../../video/ogc/SDL_ogcvideo.h"
 
 #include <malloc.h>
+#include <ogc/cache.h>
 #include <ogc/gx.h>
 #include <ogc/video.h>
 
@@ -47,7 +48,10 @@ typedef struct
 typedef struct
 {
     void *texels;
+    void *pixels;
+    SDL_Rect pixels_rect;
     u16 pitch;
+    u16 pixels_pitch;
     u8 format;
     u8 needed_stages; // Normally 1, set to 2 for palettized formats
 } OGC_TextureData;
@@ -125,24 +129,45 @@ static int OGC_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 static int OGC_LockTexture(SDL_Renderer *renderer, SDL_Texture *texture,
                            const SDL_Rect *rect, void **pixels, int *pitch)
 {
-    // TODO
+    OGC_TextureData *ogc_tex = texture->driverdata;
+
+    ogc_tex->pixels = SDL_malloc(rect->w * rect->h * SDL_BYTESPERPIXEL(texture->format));
+    ogc_tex->pixels_pitch = rect->w * SDL_BYTESPERPIXEL(texture->format);
+    ogc_tex->pixels_rect = *rect;
+    *pixels = ogc_tex->pixels;
+    *pitch = ogc_tex->pixels_pitch;
     return 0;
 }
 
 static void OGC_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 {
-    // TODO
+    OGC_TextureData *ogc_tex = texture->driverdata;
+    u32 texture_size;
+
+    OGC_pixels_to_texture(ogc_tex->pixels, texture->format,
+                          &ogc_tex->pixels_rect, ogc_tex->pixels_pitch,
+                          ogc_tex->texels, texture->w);
+    /* It would be more effective if we updated only the changed range here,
+     * but the complexity is probably not worth the effort. */
+    texture_size = GX_GetTexBufferSize(texture->w, texture->h, ogc_tex->format,
+                                       GX_FALSE, 0);
+    DCStoreRange(ogc_tex->texels, texture_size);
+    GX_InvalidateTexAll();
+
+
+    if (ogc_tex->pixels) {
+        SDL_free(ogc_tex->pixels);
+        ogc_tex->pixels = NULL;
+    }
 }
 
 static int OGC_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
                              const SDL_Rect *rect, const void *pixels, int pitch)
 {
     OGC_TextureData *ogc_tex = texture->driverdata;
-    u8 format;
 
-    // TODO: take rect into account
-    OGC_pixels_to_texture((void*)pixels, texture->format, texture->w, texture->h,
-                          pitch, ogc_tex->texels, &format);
+    OGC_pixels_to_texture((void*)pixels, texture->format, rect,
+                          pitch, ogc_tex->texels, texture->w);
 
     return 0;
 }
@@ -287,7 +312,6 @@ static int OGC_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL
 
 static int OGC_RenderSetViewPort(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 {
-    OGC_RenderData *data = (OGC_RenderData *)renderer->driverdata;
     const SDL_Rect *viewport = &cmd->data.viewport.rect;
 
     float v_aspect = viewport->h / 2.0;
@@ -589,10 +613,13 @@ SDL_RenderDriver OGC_RenderDriver = {
     .info = {
         .name = "ogc",
         .flags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE,
-        .num_texture_formats = 2,
+        .num_texture_formats = 5,
         .texture_formats = {
             [0] = SDL_PIXELFORMAT_RGB565,
             [1] = SDL_PIXELFORMAT_RGBA8888,
+            [2] = SDL_PIXELFORMAT_ARGB8888,
+            [3] = SDL_PIXELFORMAT_RGB24,
+            [4] = SDL_PIXELFORMAT_XRGB8888,
             // TODO: add more
         },
         .max_texture_width = 1024,
