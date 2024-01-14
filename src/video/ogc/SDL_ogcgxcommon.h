@@ -23,13 +23,16 @@
 #ifndef SDL_ogcgxcommon_h_
 #define SDL_ogcgxcommon_h_
 
+#include "SDL_render.h"
+
 #include <gctypes.h>
 
 #define GX_COLOR_AS_U32(c) *((u32*)&c)
 
 void OGC_draw_init(int w, int h, int h_aspect, int v_aspect);
 void OGC_set_viewport(int x, int y, int w, int h, float h_aspect, float v_aspect);
-void OGC_load_texture(void *texels, int w, int h, u8 gx_format);
+void OGC_load_texture(void *texels, int w, int h, u8 gx_format,
+                      SDL_ScaleMode scale_mode);
 
 #endif /* SDL_ogcgxcommon_h_ */
 

@@ -99,7 +99,8 @@ void OGC_draw_init(int w, int h, int h_aspect, int v_aspect)
     GX_InvVtxCache(); // update vertex cache
 }
 
-void OGC_load_texture(void *texels, int w, int h, u8 format)
+void OGC_load_texture(void *texels, int w, int h, u8 format,
+                      SDL_ScaleMode scale_mode)
 {
     GXTexObj texobj_a, texobj_b;
 
@@ -127,7 +128,19 @@ void OGC_load_texture(void *texels, int w, int h, u8 format)
         GX_InitTexObj(&texobj_a, texels, w, h, format, GX_CLAMP, GX_CLAMP, GX_FALSE);
     }
 
-    GX_InitTexObjLOD(&texobj_a, GX_NEAR, GX_NEAR, 0.0f, 0.0f, 0.0f, 0, 0, GX_ANISO_1);
+    switch (scale_mode) {
+    case SDL_ScaleModeLinear:
+        GX_InitTexObjLOD(&texobj_a, GX_LINEAR, GX_LINEAR,
+                         0.0f, 0.0f, 0.0f, 0, 0, GX_ANISO_1);
+        break;
+    case SDL_ScaleModeBest:
+        GX_InitTexObjLOD(&texobj_a, GX_LIN_MIP_LIN, GX_LINEAR,
+                         0.0f, 10.0f, 0.0f, 0, GX_ENABLE, GX_ANISO_4);
+        break;
+    default:
+        GX_InitTexObjLOD(&texobj_a, GX_NEAR, GX_NEAR,
+                         0.0f, 0.0f, 0.0f, 0, 0, GX_ANISO_1);
+    }
     GX_LoadTexObj(&texobj_a, GX_TEXMAP0); // load texture object so its ready to use
 }
 
