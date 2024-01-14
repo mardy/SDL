@@ -108,7 +108,7 @@ int OGC_VideoInit(_THIS)
 
     /* Allocate the XFB */
     videodata->xfb[0] = MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
-    videodata->xfb[1] = NULL; /* We'll allocate this when double-buffering */
+    videodata->xfb[1] = MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
 
     VIDEO_ClearFrameBuffer(vmode, videodata->xfb[0], COLOR_BLACK);
     VIDEO_SetNextFramebuffer(videodata->xfb[0]);
@@ -172,20 +172,24 @@ void OGC_VideoQuit(_THIS)
 void *OGC_video_get_xfb(_THIS)
 {
     SDL_VideoData *videodata = _this->driverdata;
-    return videodata->xfb[0];
+    return videodata->xfb[videodata->fb_index];
 }
 
 void OGC_video_flip(_THIS, bool vsync)
 {
+    SDL_VideoData *videodata = _this->driverdata;
     void *xfb = OGC_video_get_xfb(_this);
     GX_CopyDisp(xfb, GX_TRUE);
     GX_DrawDone();
     GX_Flush();
 
+    VIDEO_SetNextFramebuffer(xfb);
     VIDEO_Flush();
     if (vsync) {
         VIDEO_WaitVSync();
     }
+
+    videodata->fb_index ^= 1;
 }
 
 #endif /* SDL_VIDEO_DRIVER_OGC */

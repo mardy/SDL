@@ -32,6 +32,7 @@ typedef struct SDL_VideoData
     GXRModeObj *vmode;
     u8 *gp_fifo;
     void *xfb[2];
+    u8 fb_index;
 } SDL_VideoData;
 
 typedef struct SDL_WindowData
