@@ -172,9 +172,12 @@ static int OGC_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     return 0;
 }
 
-static void OGC_SetTextureScaleMode(SDL_Renderer *renderer, SDL_Texture *texture, SDL_ScaleMode scaleMode)
+static void OGC_SetTextureScaleMode(SDL_Renderer *renderer,
+                                    SDL_Texture *texture,
+                                    SDL_ScaleMode scaleMode)
 {
-    // TODO
+    /* Nothing to do here: the scale mode is applied to the texture when
+     * loading it in OGC_load_texture(). */
 }
 
 static int OGC_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
@@ -386,7 +389,7 @@ static int OGC_RenderGeometry(SDL_Renderer *renderer, void *vertices,
 
         size_per_element += sizeof(SDL_FPoint);
         OGC_load_texture(ogc_tex->texels, texture->w, texture->h,
-                         ogc_tex->format);
+                         ogc_tex->format, texture->scaleMode);
         stage = GX_TEVSTAGE0 + ogc_tex->needed_stages - 1;
 
         GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);

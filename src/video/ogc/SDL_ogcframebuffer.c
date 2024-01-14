@@ -108,7 +108,8 @@ int SDL_OGC_UpdateWindowFramebuffer(_THIS, SDL_Window *window, const SDL_Rect *r
                                        GX_FALSE, 0);
     DCStoreRange(windowdata->texels, texture_size);
     GX_InvalidateTexAll();
-    OGC_load_texture(windowdata->texels, window->w, window->h, gx_format);
+    OGC_load_texture(windowdata->texels, window->w, window->h, gx_format,
+                     SDL_ScaleModeNearest);
     draw_screen_rect(window);
     GX_DrawDone();
 
