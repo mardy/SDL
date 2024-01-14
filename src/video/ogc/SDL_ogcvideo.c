@@ -32,6 +32,7 @@
 #include "SDL_ogcevents_c.h"
 #include "SDL_ogcframebuffer_c.h"
 #include "SDL_ogcgxcommon.h"
+#include "SDL_ogcmouse.h"
 #include "SDL_ogcvideo.h"
 
 #include <malloc.h>
@@ -155,12 +156,20 @@ int OGC_VideoInit(_THIS)
     SDL_AddDisplayMode(&_this->displays[0], &mode);
 
     videodata->vmode = vmode;
+
+#ifdef __wii__
+    OGC_InitMouse(_this);
+#endif
     return 0;
 }
 
 void OGC_VideoQuit(_THIS)
 {
     SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
+
+#ifdef __wii__
+    OGC_QuitMouse(_this);
+#endif
 
     SDL_free(videodata->gp_fifo);
     if (videodata->xfb[0])
@@ -179,6 +188,10 @@ void OGC_video_flip(_THIS, bool vsync)
 {
     SDL_VideoData *videodata = _this->driverdata;
     void *xfb = OGC_video_get_xfb(_this);
+
+#ifdef __wii__
+    OGC_draw_cursor(_this);
+#endif
     GX_CopyDisp(xfb, GX_TRUE);
     GX_DrawDone();
     GX_Flush();

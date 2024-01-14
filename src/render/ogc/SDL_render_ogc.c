@@ -64,7 +64,8 @@ static inline void OGC_SetBlendMode(SDL_Renderer *renderer, SDL_BlendMode blend_
 {
     OGC_RenderData *data = renderer->driverdata;
 
-    if (blend_mode == data->current_blend_mode) {
+    if (data->ops_after_present > 0 &&
+        blend_mode == data->current_blend_mode) {
         /* Nothing to do */
         return;
     }
