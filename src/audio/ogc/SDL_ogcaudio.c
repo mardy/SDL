@@ -109,7 +109,28 @@ static void audio_frame_finished(AESNDPB *pb, u32 state, void *arg)
     SDL_AudioDevice *this = (SDL_AudioDevice *)arg;
 
     if (state == VOICE_STATE_STREAM) {
-        LWP_CondBroadcast(this->hidden->cv);
+        const size_t buffer_size = DMA_BUFFER_SIZE;
+        s8 playing_buffer;
+        void *buffer;
+
+        /* Immediately send the next buffer to the DSP. It's important that
+         * AESND_SetVoiceBuffer() gets called before this callback returns, or
+         * some audio gaps might be audible. */
+        contextLock(this);
+        playing_buffer = (this->hidden->playing_buffer + 1) % NUM_BUFFERS;
+        buffer = this->hidden->dma_buffers[playing_buffer];
+        AESND_SetVoiceBuffer(pb, buffer, buffer_size);
+        this->hidden->playing_buffer = playing_buffer;
+        contextUnlock(this);
+
+        /* If a frame has finished playing, it means that the corresponding
+         * buffer is no longer in use and can be filled up again. We signal
+         * this event to the audio thread via a semaphore. */
+        LWP_SemPost(this->hidden->available_buffers);
+    } if (state == VOICE_STATE_STOPPED) {
+        contextLock(this);
+        this->hidden->playing_buffer = -1;
+        contextUnlock(this);
     }
 }
 
@@ -126,6 +147,7 @@ static int OGCAUDIO_OpenDevice(_THIS, const char *devname)
                  devname, this->spec.freq, this->spec.channels);
 
     memset(hidden, 0, sizeof(*hidden));
+    hidden->playing_buffer = -1;
     this->hidden = hidden;
 
     AESND_Init();
@@ -133,7 +155,11 @@ static int OGCAUDIO_OpenDevice(_THIS, const char *devname)
 
     /* Initialise internal state */
     LWP_MutexInit(&hidden->lock, false);
-    LWP_CondInit(&hidden->cv);
+    /* We set the initial number of available buffers to NUM_BUFFERS - 1, since
+     * SDL first calls GetDeviceBuf() and starts filling it without first
+     * calling WaitDevice(). So we consider the first buffer to be busy already
+     * at start. */
+    LWP_SemInit(&hidden->available_buffers, NUM_BUFFERS - 1, NUM_BUFFERS);
 
     if (this->spec.freq <= 0 || this->spec.freq > 144000)
         this->spec.freq = DSP_DEFAULT_FREQ;
@@ -170,26 +196,27 @@ static int OGCAUDIO_OpenDevice(_THIS, const char *devname)
 static void OGCAUDIO_PlayDevice(_THIS)
 {
     void *buffer;
-    size_t nextbuf;
-    size_t buffer_size = DMA_BUFFER_SIZE;
 
+    /* This only sends the first audio buffer. The following ones will always
+     * be send from the audio_frame_finished() callback, without having to
+     * switch between threads. */
     contextLock(this);
-
-    nextbuf = this->hidden->nextbuf;
-    this->hidden->nextbuf = (nextbuf + 1) % NUM_BUFFERS;
-
+    if (this->hidden->playing_buffer < 0) {
+        buffer = this->hidden->dma_buffers[++this->hidden->playing_buffer];
+        AESND_SetVoiceBuffer(this->hidden->voice, buffer, DMA_BUFFER_SIZE);
+    }
     contextUnlock(this);
-
-    buffer = this->hidden->dma_buffers[nextbuf];
-    DCStoreRange(buffer, buffer_size);
-    AESND_SetVoiceBuffer(this->hidden->voice, buffer, buffer_size);
 }
 
 static void OGCAUDIO_WaitDevice(_THIS)
 {
-    contextLock(this);
-    LWP_CondWait(this->hidden->cv, this->hidden->lock);
-    contextUnlock(this);
+    s8 nextbuf;
+
+    /* This will block until at least one buffer is available for writing. */
+    LWP_SemWait(this->hidden->available_buffers);
+
+    nextbuf = this->hidden->nextbuf;
+    this->hidden->nextbuf = (nextbuf + 1) % NUM_BUFFERS;
 }
 
 static Uint8 *OGCAUDIO_GetDeviceBuf(_THIS)
@@ -201,6 +228,7 @@ static void OGCAUDIO_CloseDevice(_THIS)
 {
     struct SDL_PrivateAudioData *hidden = this->hidden;
 
+    LWP_SemDestroy(hidden->available_buffers);
     if (hidden->voice) {
         AESND_SetVoiceStop(hidden->voice, true);
         AESND_FreeVoice(hidden->voice);
