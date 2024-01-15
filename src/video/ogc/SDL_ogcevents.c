@@ -60,10 +60,10 @@ static void pump_ir_events(_THIS)
     for (int i = 0; i < 4; i++) {
         WPADData *data = WPAD_Data(i);
 
-        if (!data->ir.smooth_valid) continue;
+        if (!data->ir.valid) continue;
 
         SDL_SendMouseMotion(_this->windows, i,
-                            0, data->ir.sx, data->ir.sy);
+                            0, data->ir.x, data->ir.y);
 
         for (int b = 0; b < MAX_WII_MOUSE_BUTTONS; b++) {
             if (data->btns_d & s_mouse_button_map[b].wii) {
