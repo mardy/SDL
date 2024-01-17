@@ -103,6 +103,22 @@ static void save_efb_to_texture(SDL_Renderer *renderer)
     GX_CopyTex(ogc_tex->texels, GX_TRUE);
 }
 
+static void update_texture(SDL_Texture *texture, const SDL_Rect *rect,
+                           const void *pixels, int pitch)
+{
+    OGC_TextureData *ogc_tex = texture->driverdata;
+    u32 texture_size;
+
+    OGC_pixels_to_texture((void*)pixels, texture->format, rect,
+                          pitch, ogc_tex->texels, texture->w);
+    texture_size = GX_GetTexBufferSize(texture->w, texture->h, ogc_tex->format,
+                                       GX_FALSE, 0);
+    /* It would be more effective if we updated only the changed range here,
+     * but the complexity is probably not worth the effort. */
+    DCStoreRange(ogc_tex->texels, texture_size);
+    GX_InvalidateTexAll();
+}
+
 static int OGC_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 {
     u32 texture_size;
@@ -143,18 +159,9 @@ static int OGC_LockTexture(SDL_Renderer *renderer, SDL_Texture *texture,
 static void OGC_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 {
     OGC_TextureData *ogc_tex = texture->driverdata;
-    u32 texture_size;
 
-    OGC_pixels_to_texture(ogc_tex->pixels, texture->format,
-                          &ogc_tex->pixels_rect, ogc_tex->pixels_pitch,
-                          ogc_tex->texels, texture->w);
-    /* It would be more effective if we updated only the changed range here,
-     * but the complexity is probably not worth the effort. */
-    texture_size = GX_GetTexBufferSize(texture->w, texture->h, ogc_tex->format,
-                                       GX_FALSE, 0);
-    DCStoreRange(ogc_tex->texels, texture_size);
-    GX_InvalidateTexAll();
-
+    update_texture(texture, &ogc_tex->pixels_rect,
+                   ogc_tex->pixels, ogc_tex->pixels_pitch);
 
     if (ogc_tex->pixels) {
         SDL_free(ogc_tex->pixels);
@@ -165,11 +172,7 @@ static void OGC_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 static int OGC_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
                              const SDL_Rect *rect, const void *pixels, int pitch)
 {
-    OGC_TextureData *ogc_tex = texture->driverdata;
-
-    OGC_pixels_to_texture((void*)pixels, texture->format, rect,
-                          pitch, ogc_tex->texels, texture->w);
-
+    update_texture(texture, rect, pixels, pitch);
     return 0;
 }
 
