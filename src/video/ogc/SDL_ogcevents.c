@@ -49,7 +49,7 @@ static const struct {
 
 static void pump_ir_events(_THIS)
 {
-    SDL_Cursor *cursor;
+    SDL_Mouse *mouse = SDL_GetMouse();
     bool wiimote_pointed_at_screen = false;
 
     if (!_this->windows) return;
@@ -89,9 +89,10 @@ static void pump_ir_events(_THIS)
      * is hidden. Note that this only affects applications which haven't
      * explicitly set a cursor: the others remain in full control of whether a
      * cursor should be shown or not. */
-    cursor = wiimote_pointed_at_screen ?
-        OGC_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND) : NULL;
-    SDL_SetDefaultCursor(cursor);
+    if (mouse && mouse->cur_cursor == mouse->def_cursor &&
+        mouse->cursor_shown != wiimote_pointed_at_screen) {
+        SDL_ShowCursor(wiimote_pointed_at_screen);
+    }
 }
 #endif
 

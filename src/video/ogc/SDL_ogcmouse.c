@@ -160,6 +160,8 @@ void OGC_InitMouse(_THIS)
     mouse->CreateCursor = OGC_CreateCursor;
     mouse->CreateSystemCursor = OGC_CreateSystemCursor;
     mouse->FreeCursor = OGC_FreeCursor;
+
+    SDL_SetDefaultCursor(OGC_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND));
 }
 
 void OGC_QuitMouse(_THIS)
