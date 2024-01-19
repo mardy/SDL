@@ -302,8 +302,8 @@ static int OGC_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL
         vertex = vertices + size_per_element * i;
 
         vertex_xy = (SDL_FPoint *)vertex;
-        vertex_xy->x = xy_[0];
-        vertex_xy->y = xy_[1];
+        vertex_xy->x = xy_[0] * scale_x;
+        vertex_xy->y = xy_[1] * scale_x;
 
         *(SDL_Color *)(vertex + sizeof(SDL_FPoint)) = col;
 
