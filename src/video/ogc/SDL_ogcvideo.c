@@ -47,6 +47,12 @@
 static int OGC_VideoInit(_THIS);
 static void OGC_VideoQuit(_THIS);
 
+static void OGC_ShowWindow(_THIS, SDL_Window *window)
+{
+    SDL_SetMouseFocus(window);
+    SDL_SetKeyboardFocus(window);
+}
+
 /* OGC driver bootstrap functions */
 
 static void OGC_DeleteDevice(SDL_VideoDevice *device)
@@ -80,6 +86,7 @@ static SDL_VideoDevice *OGC_CreateDevice(void)
     device->VideoInit = OGC_VideoInit;
     device->VideoQuit = OGC_VideoQuit;
     device->PumpEvents = OGC_PumpEvents;
+    device->ShowWindow = OGC_ShowWindow;
     device->CreateWindowFramebuffer = SDL_OGC_CreateWindowFramebuffer;
     device->UpdateWindowFramebuffer = SDL_OGC_UpdateWindowFramebuffer;
     device->DestroyWindowFramebuffer = SDL_OGC_DestroyWindowFramebuffer;
