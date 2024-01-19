@@ -27,6 +27,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "SDL_error.h"
 #include "SDL_filesystem.h"
@@ -43,7 +44,20 @@ static inline int create_dir(const char *dirname)
 
 char *SDL_GetBasePath(void)
 {
-    return SDL_strdup("/apps/");
+    char buffer[256];
+    size_t len;
+
+    if (!getcwd(buffer, sizeof(buffer) - 1)) {
+        return "/";
+    }
+
+    len = strlen(buffer);
+    if (len > 0 && buffer[len - 1] != '/') {
+        buffer[len] = '/';
+        buffer[len + 1] = '\0';
+    }
+
+    return SDL_strdup(buffer);
 }
 
 char *SDL_GetPrefPath(const char *org, const char *app)
