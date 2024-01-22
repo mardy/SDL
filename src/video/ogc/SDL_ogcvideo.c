@@ -153,7 +153,7 @@ int OGC_VideoInit(_THIS)
     SDL_zero(mode);
     mode.format = SDL_PIXELFORMAT_ARGB8888;
     mode.w = vmode->fbWidth;
-    mode.h = vmode->xfbHeight;
+    mode.h = vmode->efbHeight;
     mode.refresh_rate = 60;
     mode.driverdata = NULL;
     if (SDL_AddBasicVideoDisplay(&mode) < 0) {
