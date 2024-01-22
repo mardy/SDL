@@ -43,6 +43,7 @@ typedef struct
     GXColor clear_color;
     int ops_after_present;
     bool vsync;
+    u8 efb_pixel_format;
 } OGC_RenderData;
 
 typedef struct
@@ -187,6 +188,7 @@ static void OGC_SetTextureScaleMode(SDL_Renderer *renderer,
 static int OGC_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
 {
     OGC_RenderData *data = renderer->driverdata;
+    u8 desired_efb_pixel_format = GX_PF_RGB8_Z24;
 
     if (texture) {
         if (texture->w > MAX_EFB_WIDTH || texture->h > MAX_EFB_HEIGHT) {
@@ -205,7 +207,17 @@ static int OGC_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
             SDL_LogWarn(SDL_LOG_CATEGORY_RENDER,
                         "Render target set after drawing!");
         }
+
+        if (SDL_ISPIXELFORMAT_ALPHA(texture->format)) {
+            desired_efb_pixel_format = GX_PF_RGBA6_Z24;
+        }
     }
+
+    if (desired_efb_pixel_format != data->efb_pixel_format) {
+        data->efb_pixel_format = desired_efb_pixel_format;
+        GX_SetPixelFmt(data->efb_pixel_format, GX_ZC_LINEAR);
+    }
+
     return 0;
 }
 
@@ -581,6 +593,7 @@ static SDL_Renderer *OGC_CreateRenderer(SDL_Window *window, Uint32 flags)
         return NULL;
     }
 
+    data->efb_pixel_format = GX_PF_RGB8_Z24;
     data->current_blend_mode = SDL_BLENDMODE_NONE;
     data->vsync = true;
 
