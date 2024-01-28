@@ -73,7 +73,7 @@ static inline void OGC_SetBlendMode(SDL_Renderer *renderer, SDL_BlendMode blend_
 
     switch (blend_mode) {
     case SDL_BLENDMODE_NONE:
-        GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+        GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
         break;
     case SDL_BLENDMODE_BLEND:
         GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
@@ -594,7 +594,7 @@ static SDL_Renderer *OGC_CreateRenderer(SDL_Window *window, Uint32 flags)
     }
 
     data->efb_pixel_format = GX_PF_RGB8_Z24;
-    data->current_blend_mode = SDL_BLENDMODE_NONE;
+    data->current_blend_mode = SDL_BLENDMODE_INVALID;
     data->vsync = true;
 
     renderer->WindowEvent = OGC_WindowEvent;
