@@ -496,7 +496,7 @@ static SDL_JoystickGUID OGC_JoystickGetDeviceGUID(int device_index)
      * Since we want the gamepads to appear with the numeric ID in their
      * name, we make them unique by assigning a different product depending on
      * the port. */
-    product = index << 8;
+    product = (index + 1) << 8;
     if (index >= GC_JOYSTICKS_START && index < GC_JOYSTICKS_END) {
         bus = SDL_HARDWARE_BUS_UNKNOWN;
     } else {
