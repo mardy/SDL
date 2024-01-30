@@ -29,18 +29,6 @@
 #include <ogc/gx.h>
 #include <ogc/video.h>
 
-typedef struct tagcamera {
-    guVector pos;
-    guVector up;
-    guVector view;
-} camera;
-
-static camera cam = {
-    { 0.0F, 0.0F, 0.0F },
-    { 0.0F, -0.5F, 0.0F },
-    { 0.0F, 0.0F, 0.5F }
-};
-
 static const f32 tex_pos[] __attribute__((aligned(32))) = {
     0.0,
     0.0,
@@ -52,29 +40,27 @@ static const f32 tex_pos[] __attribute__((aligned(32))) = {
     1.0,
 };
 
-void OGC_set_viewport(int x, int y, int w, int h, float h_aspect, float v_aspect)
+void OGC_set_viewport(int x, int y, int w, int h)
 {
-    Mtx m, mv, view;
     Mtx44 proj;
 
     GX_SetViewport(x, y, w, h, 0, 1);
     GX_SetScissor(x, y, w, h);
 
-    memset(&view, 0, sizeof(Mtx));
-    guLookAt(view, &cam.pos, &cam.up, &cam.view);
-    guMtxIdentity(m);
-    guMtxTransApply(m, m, 0.5 + (-w / 2.0), 0.5 + (-h / 2.0), 1000);
-    guMtxConcat(view, m, mv);
-    GX_LoadPosMtxImm(mv, GX_PNMTX0);
-
     // matrix, t, b, l, r, n, f
-    guOrtho(proj, v_aspect, -v_aspect, -h_aspect, h_aspect, 100, 1000);
+    guOrtho(proj, 0, h, 0, w, 0, 1);
     GX_LoadProjectionMtx(proj, GX_ORTHOGRAPHIC);
 }
 
-void OGC_draw_init(int w, int h, int h_aspect, int v_aspect)
+void OGC_draw_init(int w, int h)
 {
+    Mtx mv;
+
     SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "OGC_draw_init called with %d, %d", w, h);
+
+    guMtxIdentity(mv);
+    guMtxTransApply(mv, mv, 0.5, 0.5, 0);
+    GX_LoadPosMtxImm(mv, GX_PNMTX0);
 
     GX_ClearVtxDesc();
     GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
@@ -94,7 +80,7 @@ void OGC_draw_init(int w, int h, int h_aspect, int v_aspect)
     GX_SetTevOp(GX_TEVSTAGE0, GX_REPLACE);
     GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
 
-    OGC_set_viewport(0, 0, w, h, h_aspect, v_aspect);
+    OGC_set_viewport(0, 0, w, h);
 
     GX_InvVtxCache(); // update vertex cache
 }

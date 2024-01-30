@@ -107,7 +107,6 @@ int OGC_VideoInit(_THIS)
     SDL_DisplayMode mode;
     GXRModeObj *vmode;
     static const GXColor background = { 0, 0, 0, 255 };
-    int h_aspect, v_aspect;
 
     VIDEO_Init();
 
@@ -142,10 +141,7 @@ int OGC_VideoInit(_THIS)
 
     GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
 
-    /* Should we need to adjust the aspect, this is the place to do it */
-    h_aspect = 320;
-    v_aspect = 240;
-    OGC_draw_init(vmode->fbWidth, vmode->efbHeight, h_aspect, v_aspect);
+    OGC_draw_init(vmode->fbWidth, vmode->efbHeight);
 
     GX_Flush();
 

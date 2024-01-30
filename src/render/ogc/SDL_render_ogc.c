@@ -333,10 +333,7 @@ static int OGC_RenderSetViewPort(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 {
     const SDL_Rect *viewport = &cmd->data.viewport.rect;
 
-    float v_aspect = viewport->h / 2.0;
-    float h_aspect = viewport->w / 2.0;
-    OGC_set_viewport(viewport->x, viewport->y, viewport->w, viewport->h,
-                     h_aspect, v_aspect);
+    OGC_set_viewport(viewport->x, viewport->y, viewport->w, viewport->h);
     return 0;
 }
 
