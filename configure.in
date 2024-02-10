@@ -950,8 +950,8 @@ AC_HELP_STRING([--enable-nintendo-wii], [configure SDL to work with Nintendo Wii
         AC_DEFINE(SDL_AUDIO_DRIVER_OGC)
         SOURCES="$SOURCES $srcdir/src/audio/ogc/*.c"
         have_audio=yes
-        AC_DEFINE(SDL_JOYSTICK_WII)
-        SOURCES="$SOURCES $srcdir/src/joystick/wii/*.c"
+        AC_DEFINE(SDL_JOYSTICK_OGC)
+        SOURCES="$SOURCES $srcdir/src/joystick/ogc/*.c"
         have_joystick=yes
         AC_DEFINE(SDL_THREAD_OGC)
         SOURCES="$SOURCES $srcdir/src/thread/ogc/*.c"
@@ -990,8 +990,8 @@ AC_HELP_STRING([--enable-nintendo-gamecube], [configure SDL to work with Nintend
         AC_DEFINE(SDL_AUDIO_DRIVER_OGC)
         SOURCES="$SOURCES $srcdir/src/audio/ogc/*.c"
         have_audio=yes
-        AC_DEFINE(SDL_JOYSTICK_GAMECUBE)
-        SOURCES="$SOURCES $srcdir/src/joystick/gamecube/*.c"
+        AC_DEFINE(SDL_JOYSTICK_OGC)
+        SOURCES="$SOURCES $srcdir/src/joystick/ogc/*.c"
         have_joystick=yes
         AC_DEFINE(SDL_THREAD_OGC)
         SOURCES="$SOURCES $srcdir/src/thread/ogc/*.c"

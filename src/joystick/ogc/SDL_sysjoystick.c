@@ -21,7 +21,7 @@
  */
 #include "SDL_config.h"
 
-#ifdef SDL_JOYSTICK_WII
+#ifdef SDL_JOYSTICK_OGC
 
 #include "SDL_events.h"
 #include "SDL_joystick.h"
@@ -33,11 +33,14 @@
 #include <wiiuse/wpad.h>
 #include <math.h>
 
-#define PI 					3.14159265f
-
 #define MAX_GC_JOYSTICKS	4
 #define MAX_WII_JOYSTICKS	4
+
+#ifdef __wii__
 #define MAX_JOYSTICKS		(MAX_GC_JOYSTICKS + MAX_WII_JOYSTICKS)
+#else
+#define MAX_JOYSTICKS		MAX_GC_JOYSTICKS
+#endif
 
 #define MAX_GC_AXES			6
 #define MAX_GC_BUTTONS		8
@@ -82,17 +85,45 @@ typedef struct joystick_wpaddata_t
 	s16 classic_cal[4][3]; // 4x axes, min/center/max
 }joystick_wpaddata;
 
+static const u16 sdl_buttons_gc[] =
+{
+	PAD_BUTTON_A,
+	PAD_BUTTON_B,
+	0 /* 1 */,
+	0 /* 2 */,
+	0 /* - */,
+	PAD_TRIGGER_Z,
+	PAD_BUTTON_START,
+	0 /* Z */,
+	0 /* C */,
+	PAD_BUTTON_X,
+	PAD_BUTTON_Y,
+	PAD_TRIGGER_L,
+	PAD_TRIGGER_R
+};
+
 /* The private structure used to keep track of a joystick */
 typedef struct joystick_hwdata_t
 {
 	int index;
 	int type;
+#ifdef __wii__
 	union
 	{
 		joystick_paddata gamecube;
 		joystick_wpaddata wiimote;
 	};
+#else
+	joystick_paddata gamecube;
+#endif
 } joystick_hwdata;
+
+static const int __jspad_enabled = 1;
+static const int __numgcjoysticks = 4;
+
+#ifdef __wii__
+static const int __jswpad_enabled = 1;
+static const int __numwiijoysticks = 4;
 
 static const u32 sdl_buttons_wii[] =
 {
@@ -113,27 +144,7 @@ static const u32 sdl_buttons_wii[] =
 	WPAD_CLASSIC_BUTTON_ZR
 };
 
-static const u16 sdl_buttons_gc[] =
-{
-	PAD_BUTTON_A,
-	PAD_BUTTON_B,
-	0 /* 1 */,
-	0 /* 2 */,
-	0 /* - */,
-	PAD_TRIGGER_Z,
-	PAD_BUTTON_START,
-	0 /* Z */,
-	0 /* C */,
-	PAD_BUTTON_X,
-	PAD_BUTTON_Y,
-	PAD_TRIGGER_L,
-	PAD_TRIGGER_R
-};
 
-static const int __jswpad_enabled = 1;
-static const int __jspad_enabled = 1;
-static const int __numwiijoysticks = 4;
-static const int __numgcjoysticks = 4;
 
 /* Helpers to separate nunchuk vs classic buttons which share the
  * same scan codes. In particular, up on the classic controller is
@@ -147,71 +158,6 @@ static int wii_button_is_nunchuk(int idx)
 static int wii_button_is_classic(int idx)
 {
 	return idx >= 9;
-}
-
-/* Function to scan the system for joysticks.
- * This function should return the number of available
- * joysticks.  Joystick 0 should be the system default joystick.
- * It should return -1 on an unrecoverable fatal error.
- */
-int SDL_SYS_JoystickInit(void)
-{
-	return 8;
-}
-
-static char joy_name[] = "Gamecube 0";
-
-/* Function to get the device-dependent name of a joystick */
-const char *SDL_SYS_JoystickName(int index)
-{
-	if(index>=0) {
-
-		if((index < 4) && (__jswpad_enabled) && (index < __numwiijoysticks))
-			sprintf(joy_name, "Wiimote %d", index);
-		else if((index < 8) && (__jspad_enabled) && (index < (__numgcjoysticks + 4)) && (index> 3))
-			sprintf(joy_name, "Gamecube %d", index);
-	}
-	return (const char *)joy_name;
-}
-
-/* Function to open a joystick for use.
- The joystick to open is specified by the index field of the joystick.
- This should fill the nbuttons and naxes fields of the joystick structure.
- It returns 0, or -1 if there is an error.
- */
-int SDL_SYS_JoystickOpen(SDL_Joystick *joystick)
-{
-	/* allocate memory for system specific hardware data */
-	joystick->hwdata = SDL_malloc(sizeof(joystick_hwdata));
-	if (joystick->hwdata == NULL)
-	{
-		SDL_OutOfMemory();
-		return(-1);
-	}
-	SDL_memset(joystick->hwdata, 0, sizeof(joystick_hwdata));
-	if((joystick->index < 4) && (__jswpad_enabled))
-	{
-		if(joystick->index < __numwiijoysticks)
-		{
-			((joystick_hwdata*)(joystick->hwdata))->index = joystick->index;
-			((joystick_hwdata*)(joystick->hwdata))->type = 0;
-			joystick->nbuttons = MAX_WII_BUTTONS;
-			joystick->naxes = MAX_WII_AXES;
-			joystick->nhats = MAX_WII_HATS;
-		}
-	}
-	else if((joystick->index < 8) && (__jspad_enabled))
-	{
-		if(joystick->index < (__numgcjoysticks + 4))
-		{
-			((joystick_hwdata*)(joystick->hwdata))->index = joystick->index - 4;
-			((joystick_hwdata*)(joystick->hwdata))->type = 1;
-			joystick->nbuttons = MAX_GC_BUTTONS;
-			joystick->naxes = MAX_GC_AXES;
-			joystick->nhats = MAX_GC_HATS;
-		}
-	}
-	return(0);
 }
 
 static s16 WPAD_Orient(WPADData *data, int motion)
@@ -468,6 +414,89 @@ static void _HandleWiiJoystickUpdate(SDL_Joystick* joystick)
 	}
 }
 
+#endif
+
+/* Function to scan the system for joysticks.
+ * This function should return the number of available
+ * joysticks.  Joystick 0 should be the system default joystick.
+ * It should return -1 on an unrecoverable fatal error.
+ */
+int SDL_SYS_JoystickInit(void)
+{
+	return MAX_JOYSTICKS;
+}
+
+static char joy_name[20] = "Gamecube 0";
+
+/* Function to get the device-dependent name of a joystick */
+const char *SDL_SYS_JoystickName(int index)
+{
+	if(index>=0) {
+#ifdef __wii__
+		if((index < 4) && (__jswpad_enabled) && (index < __numwiijoysticks))
+			sprintf(joy_name, "Wiimote %d", index);
+		else if((index < 8) && (__jspad_enabled) && (index < (__numgcjoysticks + 4)) && (index> 3))
+#endif
+			sprintf(joy_name, "Gamecube %d", index);
+	}
+	return (const char *)joy_name;
+}
+
+/* Function to open a joystick for use.
+ The joystick to open is specified by the index field of the joystick.
+ This should fill the nbuttons and naxes fields of the joystick structure.
+ It returns 0, or -1 if there is an error.
+ */
+int SDL_SYS_JoystickOpen(SDL_Joystick *joystick)
+{
+	/* allocate memory for system specific hardware data */
+	joystick->hwdata = SDL_malloc(sizeof(joystick_hwdata));
+	if (joystick->hwdata == NULL)
+	{
+		SDL_OutOfMemory();
+		return(-1);
+	}
+	SDL_memset(joystick->hwdata, 0, sizeof(joystick_hwdata));
+#ifdef __wii__
+	if((joystick->index < 4) && (__jswpad_enabled))
+	{
+		if(joystick->index < __numwiijoysticks)
+		{
+			((joystick_hwdata*)(joystick->hwdata))->index = joystick->index;
+			((joystick_hwdata*)(joystick->hwdata))->type = 0;
+			joystick->nbuttons = MAX_WII_BUTTONS;
+			joystick->naxes = MAX_WII_AXES;
+			joystick->nhats = MAX_WII_HATS;
+		}
+	}
+	else if((joystick->index < 8) && (__jspad_enabled))
+	{
+		if(joystick->index < (__numgcjoysticks + 4))
+		{
+			((joystick_hwdata*)(joystick->hwdata))->index = joystick->index - 4;
+			((joystick_hwdata*)(joystick->hwdata))->type = 1;
+			joystick->nbuttons = MAX_GC_BUTTONS;
+			joystick->naxes = MAX_GC_AXES;
+			joystick->nhats = MAX_GC_HATS;
+		}
+	}
+#else
+	if((joystick->index < 4) && (__jspad_enabled))
+	{
+		if(joystick->index < (__numgcjoysticks))
+		{
+			((joystick_hwdata*)(joystick->hwdata))->index = joystick->index - 4;
+			((joystick_hwdata*)(joystick->hwdata))->type = 1;
+			joystick->nbuttons = MAX_GC_BUTTONS;
+			joystick->naxes = MAX_GC_AXES;
+			joystick->nhats = MAX_GC_HATS;
+		}
+	}
+#endif
+	return(0);
+}
+
+
 static void _HandleGCJoystickUpdate(SDL_Joystick* joystick)
 {
 	u16 buttons, prev_buttons, changed;
@@ -552,21 +581,22 @@ void SDL_SYS_JoystickUpdate(SDL_Joystick *joystick)
 	if(!joystick || !joystick->hwdata)
 		return;
 
-//	WPAD_ScanPads();
 	PAD_ScanPads();
 
 	switch(((joystick_hwdata*)(joystick->hwdata))->type)
 	{
+#ifdef __wii__
 		case 0:
-		if(__jswpad_enabled)
-		_HandleWiiJoystickUpdate(joystick);
-		break;
+			if(__jswpad_enabled)
+				_HandleWiiJoystickUpdate(joystick);
+			break;
+#endif
 		case 1:
-		if(__jspad_enabled)
-		_HandleGCJoystickUpdate(joystick);
-		//break;
+			if(__jspad_enabled)
+				_HandleGCJoystickUpdate(joystick);
+			break;
 		default:
-		break;
+			break;
 	}
 }
 
