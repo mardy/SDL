@@ -1,0 +1,37 @@
+# SDL port for Nintendo GameCube/Wii
+
+This port uses the libogc library and the devkitPPC toolchain, available from
+http://www.devkitpro.org
+
+
+## Installation instructions
+
+We highly recommend using the devkitPro pre-built packages provided via pacman
+(https://devkitpro.org/wiki/devkitPro_pacman) unless intending to contribute
+changes to this port.
+
+
+## Build instructions
+
+If you need to hack on libSDL itself then the best way to start is by cloning
+the package repo at https://github.com/devkitPro/pacman-packages. The GameCube
+package is found under gamecube/SDL and the wii one, surprisingly, under
+wii/SDL. cd to the appropriate directory and run makepkg PKGDEST=. there
+(on systems without a native pacman this will be dkp-pacman). This will produce
+a .pkg.tar.zst file in the current directory which can then be installed for
+testing with (dkp-)pacman -U ./<name>.pkg.tar.zst. Once that's done you can
+modify the code under src/SDL-1.2.15/. To build with your changes first source
+the appropriate toolchain vars script - either /opt/devkitpro/wiivars.sh or
+/opt/devkitpro/cubevars.sh then run make. To install you can run sudo -E make
+install.
+
+The easiest way to contribute changes is to fork our SDL repo at
+https://github.com/devkitPro/SDL/ then clone that to src/SDL-1.2.15, replacing
+the extracted source. This port is on the ogc-sdl-1.2 branch. Create your own
+branch from that, commit your changes and make a PR request to the devkitPro
+repo.
+
+If you need further assistance with this then please ask on the forums at
+https://devkitpro.org/viewforum.php?f=40
+
+Happy hacking!
