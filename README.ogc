@@ -6,8 +6,9 @@ http://www.devkitpro.org
 
 ## Installation instructions
 
-We highly recommend using pre-built packages provided via [pacman](https://devkitpro.org/wiki/devkitPro_pacman)
-unless intending to contribute changes to this port.
+We highly recommend using the devkitPro pre-built packages provided via pacman
+(https://devkitpro.org/wiki/devkitPro_pacman) unless intending to contribute
+changes to this port.
 
 
 ## Build instructions
