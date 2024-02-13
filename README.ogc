@@ -1,47 +1,36 @@
-# SDL port to Nintendo GameCube/Wii
+# SDL port for Nintendo GameCube/Wii
 
-This port uses the libogc library and is meant to be built with the devkitPPC
-toolchain, available from http://www.devkitpro.org
+This port uses the libogc library and the devkitPPC toolchain, available from
+http://www.devkitpro.org
 
 
 ## Installation instructions
 
-It is strongly recommended to only use the pre-built packages available from
-the devkitPro repository, which can be installed via the
-[pacman](https://devkitpro.org/wiki/devkitPro_pacman) tool. This is the only
-supported way of using libSDL on the Nintendo GameCube/Wii.
+We highly recommend using pre-built packages provided via [pacman](https://devkitpro.org/wiki/devkitPro_pacman)
+unless intending to contribute changes to this port.
 
 
 ## Build instructions
 
-If you need to hack on libSDL itself and you are aware that doing so can
-conflict with your devkitPro installation and even render it unusable, you can
-build it using the source code from this repository. Unfortunately, despite all
-our good intentions, it's unlikely that you'll get any more support than this
-README file itself. So, be warned that you are doing this AT YOUR OWN RISK.
+If you need to hack on libSDL itself then the best way to start is by cloning
+the package repo at https://github.com/devkitPro/pacman-packages. The GameCube
+package is found under gamecube/SDL and the wii one, surprisingly, under
+wii/SDL. cd to the appropriate directory and run makepkg PKGDEST=. there
+(on systems without a native pacman this will be dkp-pacman). This will produce
+a .pkg.tar.zst file in the current directory which can then be installed for
+testing with (dkp-)pacman -U ./<name>.pkg.tar.zst. Once that's done you can
+modify the code under src/SDL-1.2.15/. To build with your changes first source
+the appropriate toolchain vars script - either /opt/devkitpro/wiivars.sh or
+/opt/devkitpro/cubevars.sh then run make. To install you can run sudo -E make
+install.
 
-Make sure you have setup the environment to build under devkitPro. This is
-typically done by running the command
+The easiest way to contribute changes is to fork our SDL repo at
+https://github.com/devkitPro/SDL/ then clone that to src/SDL-1.2.15, replacing
+the extracted source. This port is on the ogc-sdl-1.2 branch. Create your own
+branch from that, commit your changes and make a PR request to the devkitPro
+repo.
 
-    source /etc/profile.d/devkit-env.sh
+If you need further assistance with this then please ask on the forums at
+https://devkitpro.org/viewforum.php?f=40
 
-Then, libSDL can be built using the following commands:
-
-    source ${DEVKITPRO}/wiivars.sh
-    ./autogen.sh  # this will print lots of warnings, hich are safe to ignore
-    ./configure --prefix="${PORTLIBS_PREFIX}" \
-        --host=powerpc-eabi \
-        --disable-shared \
-        --enable-static \
-        --enable-nintendo-wii \
-        ac_cv_header_signal=no \
-        ac_cv_header_signal_h=no \
-        ac_cv_func_sigaction=no
-    make
-    # To install the library into devkitPro's rootfs
-    sudo PATH=$PATH make install
-
-Should these instructions become obsolete, please have a look at [devkitPro's
-pacman recipe for
-SDL](https://github.com/devkitPro/pacman-packages/tree/master/wii/SDL), which
-will probably give you a hint on how to update these manual build commands.
+Happy hacking!
