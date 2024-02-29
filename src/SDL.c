@@ -121,6 +121,10 @@ int SDL_InitSubSystem(Uint32 flags)
 		if ( SDL_JoystickInit() < 0 ) {
 			return(-1);
 		}
+// joystick 0 is used for mouse emulation on wii & cube.
+#if defined (__wii__) || defined (__gamecube__)
+		SDL_JoystickOpen(0);
+#endif
 		SDL_initialized |= SDL_INIT_JOYSTICK;
 	}
 #else
@@ -155,6 +159,10 @@ int SDL_Init(Uint32 flags)
 	}
 #endif
 
+// On Wii & GameCube always initialise joysticks.
+#if defined(__wii__) || defined (__gamecube__)
+  flags |= SDL_INIT_JOYSTICK;
+#endif
 	/* Clear the error message */
 	SDL_ClearError();
 
