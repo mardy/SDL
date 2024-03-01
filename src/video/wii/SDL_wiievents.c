@@ -53,9 +53,31 @@ void PumpEvents()
 
 	// this will only work if Joystick 0 has been opened and has been polled
 	WPADData *wd = WPAD_Data(WPAD_CHAN_0);
+
+	static Uint8 lastButtonStateA = SDL_RELEASED;
+	static Uint8 lastButtonStateB = SDL_RELEASED;
+
+	Uint8 stateA = (wd->btns_h & WPAD_BUTTON_A) ? SDL_PRESSED : SDL_RELEASED;
+	Uint8 stateB = (wd->btns_h & WPAD_BUTTON_B) ? SDL_PRESSED : SDL_RELEASED;
+
+	if (stateA != lastButtonStateA)
+	{
+		lastButtonStateA = stateA;
+		posted += SDL_PrivateMouseButton(stateA, SDL_BUTTON_LEFT, 0, 0);
+	}
+
+	if (stateB != lastButtonStateB)
+	{
+		lastButtonStateB = stateB;
+		posted += SDL_PrivateMouseButton(stateB, SDL_BUTTON_RIGHT, 0, 0);
+	}
+
+
 	if (wd && wd->exp.type != WPAD_EXP_CLASSIC && wd->ir.valid) {
+
 		// use SDL_BUTTON_X2 to signal that this is the wiimote acting as a mouse
 		Uint8 Buttons = SDL_GetMouseState(NULL, NULL)|SDL_BUTTON_X2MASK;
+
 		if (wd->ir.x < vresx/8)
 			wd->ir.x = vresx/8;
 		else if (wd->ir.x > (vresx + vresx/8))
