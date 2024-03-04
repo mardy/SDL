@@ -61,15 +61,9 @@ static void OGC_WindowEvent(SDL_Renderer *renderer, const SDL_WindowEvent *event
 {
 }
 
-static inline void OGC_SetBlendMode(SDL_Renderer *renderer, SDL_BlendMode blend_mode)
+static void set_blend_mode_real(SDL_Renderer *renderer, SDL_BlendMode blend_mode)
 {
     OGC_RenderData *data = renderer->driverdata;
-
-    if (data->ops_after_present > 0 &&
-        blend_mode == data->current_blend_mode) {
-        /* Nothing to do */
-        return;
-    }
 
     switch (blend_mode) {
     case SDL_BLENDMODE_NONE:
@@ -92,6 +86,19 @@ static inline void OGC_SetBlendMode(SDL_Renderer *renderer, SDL_BlendMode blend_
     }
 
     data->current_blend_mode = blend_mode;
+}
+
+static inline void OGC_SetBlendMode(SDL_Renderer *renderer, SDL_BlendMode blend_mode)
+{
+    OGC_RenderData *data = renderer->driverdata;
+
+    if (data->ops_after_present > 0 &&
+        blend_mode == data->current_blend_mode) {
+        /* Nothing to do */
+        return;
+    }
+
+    set_blend_mode_real(renderer, blend_mode);
 }
 
 static void save_efb_to_texture(SDL_Renderer *renderer)
@@ -538,6 +545,9 @@ static int OGC_RenderPresent(SDL_Renderer *renderer)
     GX_DrawDone();
 
     OGC_video_flip(SDL_GetVideoDevice(), data->vsync);
+
+    /* Mouse cursor and OSK can change the blending mode; restore it. */
+    set_blend_mode_real(renderer, data->current_blend_mode);
 
     data->ops_after_present = 0;
     return 0;
