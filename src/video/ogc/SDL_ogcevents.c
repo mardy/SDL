@@ -49,9 +49,6 @@ static const struct {
 
 static void pump_ir_events(_THIS)
 {
-    SDL_Mouse *mouse = SDL_GetMouse();
-    bool wiimote_pointed_at_screen = false;
-
     if (!_this->windows) return;
 
     if (!SDL_WasInit(SDL_INIT_JOYSTICK)) {
@@ -66,7 +63,6 @@ static void pump_ir_events(_THIS)
 
         if (!data->ir.valid) continue;
 
-        wiimote_pointed_at_screen = true;
         SDL_SendMouseMotion(_this->windows, i,
                             0, data->ir.x, data->ir.y);
 
@@ -80,18 +76,6 @@ static void pump_ir_events(_THIS)
                                     SDL_RELEASED, s_mouse_button_map[b].mouse);
             }
         }
-    }
-
-    /* Unfortunately SDL in practice supports only one mouse, so we are
-     * consolidating all the wiimotes as a single device.
-     * Here we check if any wiimote is pointed at the screen, in which case we
-     * show the default cursor (the Wii hand); if not, then the default cursor
-     * is hidden. Note that this only affects applications which haven't
-     * explicitly set a cursor: the others remain in full control of whether a
-     * cursor should be shown or not. */
-    if (mouse && mouse->cur_cursor == mouse->def_cursor &&
-        mouse->cursor_shown != wiimote_pointed_at_screen) {
-        SDL_ShowCursor(wiimote_pointed_at_screen);
     }
 }
 #endif
