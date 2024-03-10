@@ -193,6 +193,7 @@ static bool s_hardware_queried = false;
 #ifdef __wii__
 static bool s_wii_has_new_data[MAX_WII_JOYSTICKS];
 static bool s_accelerometers_as_axes = false;
+static bool s_wiimote_sideways = false;
 
 static void SDLCALL
 on_hint_accel_as_joystick_cb(void *userdata, const char *name,
@@ -325,6 +326,12 @@ static int OGC_JoystickInit(void)
 #ifdef __wii__
     SDL_AddHintCallback(SDL_HINT_ACCELEROMETER_AS_JOYSTICK,
                         on_hint_accel_as_joystick_cb, NULL);
+    /* If this is set, the Wiimote directional keys will be translated. */
+    {
+        const char *sideways_joystick_env = getenv("SDL_WII_JOYSTICK_SIDEWAYS");
+        s_wiimote_sideways =
+            sideways_joystick_env && strcmp(sideways_joystick_env, "1") == 0;
+    }
 #endif
 
     /* Initialize the needed variables */
@@ -737,13 +744,13 @@ static void HandleWiiHats(SDL_Joystick *joystick,
         int hat = SDL_HAT_CENTERED;
 
         if (pressed & buttons[0])
-            hat |= SDL_HAT_UP;
+            hat |= s_wiimote_sideways ? SDL_HAT_LEFT : SDL_HAT_UP;
         if (pressed & buttons[1])
-            hat |= SDL_HAT_DOWN;
+            hat |= s_wiimote_sideways ? SDL_HAT_RIGHT : SDL_HAT_DOWN;
         if (pressed & buttons[2])
-            hat |= SDL_HAT_LEFT;
+            hat |= s_wiimote_sideways ? SDL_HAT_DOWN : SDL_HAT_LEFT;
         if (pressed & buttons[3])
-            hat |= SDL_HAT_RIGHT;
+            hat |= s_wiimote_sideways ? SDL_HAT_UP : SDL_HAT_RIGHT;
         SDL_PrivateJoystickHat(joystick, 0, hat);
     }
 }
