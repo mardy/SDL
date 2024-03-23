@@ -49,6 +49,8 @@ static const struct {
 
 static void pump_ir_events(_THIS)
 {
+    int screen_w, screen_h;
+
     if (!_this->windows) return;
 
     if (!SDL_WasInit(SDL_INIT_JOYSTICK)) {
@@ -58,13 +60,17 @@ static void pump_ir_events(_THIS)
         WPAD_ReadPending(WPAD_CHAN_ALL, NULL);
     }
 
+    screen_w = _this->displays[0].current_mode.w;
+    screen_h = _this->displays[0].current_mode.h;
+
     for (int i = 0; i < 4; i++) {
         WPADData *data = WPAD_Data(i);
 
         if (!data->ir.valid) continue;
 
-        SDL_SendMouseMotion(_this->windows, i,
-                            0, data->ir.x, data->ir.y);
+        SDL_SendMouseMotion(_this->windows, i, 0,
+                            data->ir.x * screen_w / 640,
+                            data->ir.y * screen_h / 480);
 
         for (int b = 0; b < MAX_WII_MOUSE_BUTTONS; b++) {
             if (data->btns_d & s_mouse_button_map[b].wii) {
