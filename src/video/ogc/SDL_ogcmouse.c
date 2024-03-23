@@ -43,16 +43,16 @@ typedef struct _OGC_CursorData
     int w, h;
 } OGC_CursorData;
 
-static void draw_cursor_rect(OGC_CursorData *curdata, int x, int y)
+static void draw_cursor_rect(OGC_CursorData *curdata)
 {
     GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
-    GX_Position2s16(x, y);
+    GX_Position2s16(-curdata->hot_x, -curdata->hot_y);
     GX_TexCoord2u8(0, 0);
-    GX_Position2s16(x + curdata->w, y);
+    GX_Position2s16(curdata->w - curdata->hot_x, -curdata->hot_y);
     GX_TexCoord2u8(1, 0);
-    GX_Position2s16(x + curdata->w, y + curdata->h);
+    GX_Position2s16(curdata->w - curdata->hot_x, curdata->h - curdata->hot_y);
     GX_TexCoord2u8(1, 1);
-    GX_Position2s16(x, y + curdata->h);
+    GX_Position2s16(-curdata->hot_x, curdata->h - curdata->hot_y);
     GX_TexCoord2u8(0, 1);
     GX_End();
 }
@@ -172,18 +172,25 @@ void OGC_draw_cursor(_THIS)
 {
     SDL_Mouse *mouse = SDL_GetMouse();
     OGC_CursorData *curdata;
-    int x, y;
+    Mtx mv;
+    int screen_w, screen_h;
 
     if (!mouse || !mouse->cursor_shown ||
         !mouse->cur_cursor || !mouse->cur_cursor->driverdata) {
         return;
     }
 
+    screen_w = _this->displays[0].current_mode.w;
+    screen_h = _this->displays[0].current_mode.h;
+
     curdata = mouse->cur_cursor->driverdata;
-    x = mouse->x - curdata->hot_x;
-    y = mouse->y - curdata->hot_y;
     OGC_load_texture(curdata->texels, curdata->w, curdata->h, GX_TF_RGBA8,
                      SDL_ScaleModeNearest);
+
+    guMtxIdentity(mv);
+    guMtxScaleApply(mv, mv, screen_w / 640.0f, screen_h / 480.0f, 1.0f);
+    guMtxTransApply(mv, mv, mouse->x, mouse->y, 0);
+    GX_LoadPosMtxImm(mv, GX_PNMTX1);
 
     GX_ClearVtxDesc();
     GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
@@ -198,7 +205,9 @@ void OGC_draw_cursor(_THIS)
     GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
 
     GX_SetNumTexGens(1);
-    draw_cursor_rect(curdata, x, y);
+    GX_SetCurrentMtx(GX_PNMTX1);
+    draw_cursor_rect(curdata);
+    GX_SetCurrentMtx(GX_PNMTX0);
     GX_DrawDone();
 }
 
