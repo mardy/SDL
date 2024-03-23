@@ -46,6 +46,9 @@
 // Inverse of the VI_TVMODE macro
 #define VI_FORMAT_FROM_MODE(tvmode) (tvmode >> 2)
 
+/* A video mode with a 320 width; we'll build it programmatically. */
+static GXRModeObj s_mode320;
+
 static const GXRModeObj *s_ntsc_modes[] = {
     &TVNtsc240Ds,
     &TVNtsc480Prog,
@@ -127,6 +130,19 @@ static void add_supported_modes(SDL_VideoDisplay *display, u32 tv_format)
         return;
     }
 
+    /* All libogc video modes are 640 pixel wide, even the 240p ones. While
+     * this can be useful for some applications, others might prefer a video
+     * mode with less elongated pixels, such as 320x240. Therefore, let's
+     * create one: we take the first video mode in the array (which has always
+     * a height of approximately 240p) and we use it as template to build the
+     * "mode320": we just set the fbWidth field to 320: the VI interface will
+     * take care of the horizontal scale for us. */
+    memcpy(&s_mode320, gx_modes[0], sizeof(s_mode320));
+    s_mode320.fbWidth = 320;
+    init_display_mode(&mode, &s_mode320);
+    SDL_AddDisplayMode(display, &mode);
+
+    /* Now add all the "standard" modes from libogc */
     while (*gx_modes) {
         init_display_mode(&mode, *gx_modes);
         SDL_AddDisplayMode(display, &mode);
