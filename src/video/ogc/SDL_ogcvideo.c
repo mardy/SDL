@@ -43,9 +43,142 @@
 
 #define DEFAULT_FIFO_SIZE 256 * 1024
 
+// Inverse of the VI_TVMODE macro
+#define VI_FORMAT_FROM_MODE(tvmode) (tvmode >> 2)
+
+static const GXRModeObj *s_ntsc_modes[] = {
+    &TVNtsc240Ds,
+    &TVNtsc480Prog,
+    NULL,
+};
+
+static const GXRModeObj *s_mpal_modes[] = {
+    &TVMpal240Ds,
+    &TVMpal480Prog,
+    NULL,
+};
+
+static const GXRModeObj *s_eurgb60_modes[] = {
+    &TVEurgb60Hz240Ds,
+    &TVEurgb60Hz480Prog,
+    // Also add some PAL modes, since EURGB60 supports them too
+    &TVPal264Ds,
+    &TVPal528Prog,
+    &TVPal576ProgScale,
+    NULL,
+};
+
+static const GXRModeObj *s_pal_modes[] = {
+    &TVPal264Ds,
+    &TVPal528Prog,
+    &TVPal576ProgScale,
+    NULL,
+};
+
 /* Initialization/Query functions */
 static int OGC_VideoInit(_THIS);
 static void OGC_VideoQuit(_THIS);
+
+static void init_display_mode(SDL_DisplayMode *mode, const GXRModeObj *vmode)
+{
+    u32 format = VI_FORMAT_FROM_MODE(vmode->viTVMode);
+
+    /* Use a fake 32-bpp desktop mode */
+    SDL_zero(*mode);
+    mode->format = SDL_PIXELFORMAT_ARGB8888;
+    mode->w = vmode->fbWidth;
+    mode->h = vmode->efbHeight;
+    switch (format) {
+    case VI_DEBUG:
+    case VI_NTSC:
+    case VI_EURGB60:
+    case VI_MPAL:
+        mode->refresh_rate = 60;
+        break;
+    case VI_PAL:
+    case VI_DEBUG_PAL:
+        mode->refresh_rate = 50;
+        break;
+    }
+    mode->driverdata = (GXRModeObj*)vmode;
+}
+
+static void add_supported_modes(SDL_VideoDisplay *display, u32 tv_format)
+{
+    const GXRModeObj **gx_modes;
+    SDL_DisplayMode mode;
+
+    switch (tv_format) {
+    case VI_DEBUG:
+    case VI_NTSC:
+        gx_modes = s_ntsc_modes;
+        break;
+    case VI_MPAL:
+        gx_modes = s_mpal_modes;
+        break;
+    case VI_EURGB60:
+        gx_modes = s_eurgb60_modes;
+        break;
+    case VI_PAL:
+    case VI_DEBUG_PAL:
+        gx_modes = s_pal_modes;
+        break;
+    default:
+        return;
+    }
+
+    while (*gx_modes) {
+        init_display_mode(&mode, *gx_modes);
+        SDL_AddDisplayMode(display, &mode);
+        gx_modes++;
+    }
+}
+
+static void setup_video_mode(_THIS, GXRModeObj *vmode)
+{
+    SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
+
+    VIDEO_SetBlack(true);
+    VIDEO_Configure(vmode);
+
+    /* Allocate the XFB */
+    videodata->xfb[0] = MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
+    videodata->xfb[1] = MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
+
+    VIDEO_ClearFrameBuffer(vmode, videodata->xfb[0], COLOR_BLACK);
+    VIDEO_SetNextFramebuffer(videodata->xfb[0]);
+    VIDEO_SetBlack(false);
+    VIDEO_Flush();
+
+    VIDEO_WaitVSync();
+    if (vmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync();
+
+    /* Setup the EFB -> XFB copy operation */
+    GX_SetDispCopySrc(0, 0, vmode->fbWidth, vmode->efbHeight);
+    GX_SetDispCopyDst(vmode->fbWidth, vmode->xfbHeight);
+    GX_SetDispCopyYScale((f32)vmode->xfbHeight / (f32)vmode->efbHeight);
+    GX_SetCopyFilter(vmode->aa, vmode->sample_pattern, GX_FALSE, vmode->vfilter);
+    GX_SetFieldMode(vmode->field_rendering,
+                    ((vmode->viHeight == 2 * vmode->xfbHeight) ? GX_ENABLE : GX_DISABLE));
+
+    OGC_draw_init(vmode->fbWidth, vmode->efbHeight);
+}
+
+static int OGC_SetDisplayMode(_THIS, SDL_VideoDisplay *display,
+                              SDL_DisplayMode *mode)
+{
+    SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
+    /* The GX video mode is stored in the driverdata pointer */
+    GXRModeObj *vmode = mode->driverdata;
+
+    if (videodata->xfb[0])
+        free(MEM_K1_TO_K0(videodata->xfb[0]));
+    if (videodata->xfb[1])
+        free(MEM_K1_TO_K0(videodata->xfb[1]));
+
+    setup_video_mode(_this, vmode);
+    return 0;
+}
 
 static void OGC_ShowWindow(_THIS, SDL_Window *window)
 {
@@ -85,6 +218,7 @@ static SDL_VideoDevice *OGC_CreateDevice(void)
     /* Set the function pointers */
     device->VideoInit = OGC_VideoInit;
     device->VideoQuit = OGC_VideoQuit;
+    device->SetDisplayMode = OGC_SetDisplayMode;
     device->PumpEvents = OGC_PumpEvents;
     device->ShowWindow = OGC_ShowWindow;
     device->CreateWindowFramebuffer = SDL_OGC_CreateWindowFramebuffer;
@@ -111,52 +245,29 @@ int OGC_VideoInit(_THIS)
     VIDEO_Init();
 
     vmode = VIDEO_GetPreferredMode(NULL);
-    VIDEO_Configure(vmode);
-
-    /* Allocate the XFB */
-    videodata->xfb[0] = MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
-    videodata->xfb[1] = MEM_K0_TO_K1(SYS_AllocateFramebuffer(vmode));
-
-    VIDEO_ClearFrameBuffer(vmode, videodata->xfb[0], COLOR_BLACK);
-    VIDEO_SetNextFramebuffer(videodata->xfb[0]);
-    VIDEO_SetBlack(false);
-    VIDEO_Flush();
 
     videodata->gp_fifo = memalign(32, DEFAULT_FIFO_SIZE);
     memset(videodata->gp_fifo, 0, DEFAULT_FIFO_SIZE);
     GX_Init(videodata->gp_fifo, DEFAULT_FIFO_SIZE);
 
-    /* Setup the EFB -> XFB copy operation */
-    GX_SetDispCopySrc(0, 0, vmode->fbWidth, vmode->efbHeight);
-    GX_SetDispCopyDst(vmode->fbWidth, vmode->xfbHeight);
-    GX_SetDispCopyYScale((f32)vmode->xfbHeight / (f32)vmode->efbHeight);
-    GX_SetCopyFilter(vmode->aa, vmode->sample_pattern, GX_FALSE, vmode->vfilter);
+    setup_video_mode(_this, vmode);
     GX_SetCopyClear(background, GX_MAX_Z24);
 
-    GX_SetFieldMode(vmode->field_rendering,
-                    ((vmode->viHeight == 2 * vmode->xfbHeight) ? GX_ENABLE : GX_DISABLE));
     GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
     GX_SetCullMode(GX_CULL_NONE);
     GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
 
     GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
 
-    OGC_draw_init(vmode->fbWidth, vmode->efbHeight);
-
     GX_Flush();
 
-    /* Use a fake 32-bpp desktop mode */
-    SDL_zero(mode);
-    mode.format = SDL_PIXELFORMAT_ARGB8888;
-    mode.w = vmode->fbWidth;
-    mode.h = vmode->efbHeight;
-    mode.refresh_rate = 60;
-    mode.driverdata = NULL;
+    init_display_mode(&mode, vmode);
     if (SDL_AddBasicVideoDisplay(&mode) < 0) {
         return -1;
     }
 
     SDL_AddDisplayMode(&_this->displays[0], &mode);
+    add_supported_modes(&_this->displays[0], VI_FORMAT_FROM_MODE(vmode->viTVMode));
 
     videodata->vmode = vmode;
 
@@ -169,6 +280,7 @@ int OGC_VideoInit(_THIS)
 void OGC_VideoQuit(_THIS)
 {
     SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
+    SDL_VideoDisplay *display;
 
 #ifdef __wii__
     OGC_QuitMouse(_this);
@@ -179,6 +291,15 @@ void OGC_VideoQuit(_THIS)
         free(MEM_K1_TO_K0(videodata->xfb[0]));
     if (videodata->xfb[1])
         free(MEM_K1_TO_K0(videodata->xfb[1]));
+
+    /* During shutdown, SDL_ResetDisplayModes() will be called and will invoke
+     * SDL_free() on driverdata. Nullify the pointers in order to avoid a
+     * crash, since we didn't actually allocate this memory. */
+    display = &_this->displays[0];
+    for (int i = display->num_display_modes; i--;) {
+        display->display_modes[i].driverdata = NULL;
+    }
+    display->desktop_mode.driverdata = NULL;
 }
 
 void *OGC_video_get_xfb(_THIS)
