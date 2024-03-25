@@ -35,6 +35,7 @@
 #include <malloc.h>
 #include <ogc/cache.h>
 #include <ogc/gx.h>
+#include <wiiuse/wpad.h>
 
 typedef struct _OGC_CursorData
 {
@@ -189,6 +190,16 @@ void OGC_draw_cursor(_THIS)
 
     guMtxIdentity(mv);
     guMtxScaleApply(mv, mv, screen_w / 640.0f, screen_h / 480.0f, 1.0f);
+    /* If this is the default cursor, rotate it too */
+    if (mouse->cur_cursor == mouse->def_cursor) {
+        Mtx rot;
+        float angle;
+        WPADData *data = WPAD_Data(mouse->mouseID);
+
+        angle = data->ir.angle;
+        guMtxRotDeg(rot, 'z', angle);
+        guMtxConcat(mv, rot, mv);
+    }
     guMtxTransApply(mv, mv, mouse->x, mouse->y, 0);
     GX_LoadPosMtxImm(mv, GX_PNMTX1);
 
