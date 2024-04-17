@@ -384,7 +384,11 @@ static int OGC_RenderClear(SDL_Renderer *renderer, SDL_RenderCommand *cmd)
 
     data->clear_color = c;
     GX_SetCopyClear(c, GX_MAX_Z24);
-    GX_CopyDisp(OGC_video_get_xfb(SDL_GetVideoDevice()), GX_TRUE);
+    if (renderer->target) {
+        save_efb_to_texture(renderer->target);
+    } else {
+        GX_CopyDisp(OGC_video_get_xfb(SDL_GetVideoDevice()), GX_TRUE);
+    }
 
     return 0;
 }
