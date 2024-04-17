@@ -44,6 +44,7 @@ typedef struct
     int ops_after_present;
     bool vsync;
     u8 efb_pixel_format;
+    SDL_Texture *render_target;
 } OGC_RenderData;
 
 typedef struct
@@ -101,9 +102,8 @@ static inline void OGC_SetBlendMode(SDL_Renderer *renderer, SDL_BlendMode blend_
     set_blend_mode_real(renderer, blend_mode);
 }
 
-static void save_efb_to_texture(SDL_Renderer *renderer)
+static void save_efb_to_texture(SDL_Texture *texture)
 {
-    SDL_Texture *texture = renderer->target;
     OGC_TextureData *ogc_tex = texture->driverdata;
 
     GX_SetTexCopySrc(0, 0, texture->w, texture->h);
@@ -218,7 +218,11 @@ static int OGC_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
         if (SDL_ISPIXELFORMAT_ALPHA(texture->format)) {
             desired_efb_pixel_format = GX_PF_RGBA6_Z24;
         }
+    } else if (data->render_target) {
+        save_efb_to_texture(data->render_target);
     }
+
+    data->render_target = texture;
 
     if (desired_efb_pixel_format != data->efb_pixel_format) {
         data->efb_pixel_format = desired_efb_pixel_format;
@@ -523,10 +527,6 @@ static int OGC_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
             break;
         }
         cmd = cmd->next;
-    }
-
-    if (renderer->target) {
-        save_efb_to_texture(renderer);
     }
 
     return 0;
