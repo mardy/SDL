@@ -149,6 +149,7 @@ static void save_efb_to_texture(SDL_Texture *texture)
     GX_SetTexCopySrc(0, 0, texture->w, texture->h);
     GX_SetTexCopyDst(texture->w, texture->h, ogc_tex->format, GX_FALSE);
     GX_CopyTex(ogc_tex->texels, GX_TRUE);
+    GX_PixModeSync();
 }
 
 static void update_texture(SDL_Texture *texture, const SDL_Rect *rect,
