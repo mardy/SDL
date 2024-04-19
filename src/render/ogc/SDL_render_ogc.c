@@ -140,6 +140,11 @@ static void load_efb_from_texture(SDL_Renderer *renderer, SDL_Texture *texture)
 static void save_efb_to_texture(SDL_Texture *texture)
 {
     OGC_TextureData *ogc_tex = texture->driverdata;
+    u32 texture_size;
+
+    texture_size = GX_GetTexBufferSize(texture->w, texture->h, ogc_tex->format,
+                                       GX_FALSE, 0);
+    DCInvalidateRange(ogc_tex->texels, texture_size);
 
     GX_SetTexCopySrc(0, 0, texture->w, texture->h);
     GX_SetTexCopyDst(texture->w, texture->h, ogc_tex->format, GX_FALSE);
