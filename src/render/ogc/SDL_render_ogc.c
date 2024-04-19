@@ -45,6 +45,7 @@ typedef struct
     bool vsync;
     u8 efb_pixel_format;
     SDL_Texture *render_target;
+    SDL_Texture *saved_efb_texture;
 } OGC_RenderData;
 
 typedef struct
@@ -57,6 +58,8 @@ typedef struct
     u8 format;
     u8 needed_stages; // Normally 1, set to 2 for palettized formats
 } OGC_TextureData;
+
+static void OGC_DestroyTexture(SDL_Renderer *renderer, SDL_Texture *texture);
 
 static void OGC_WindowEvent(SDL_Renderer *renderer, const SDL_WindowEvent *event)
 {
@@ -100,6 +103,38 @@ static inline void OGC_SetBlendMode(SDL_Renderer *renderer, SDL_BlendMode blend_
     }
 
     set_blend_mode_real(renderer, blend_mode);
+}
+
+static void load_efb_from_texture(SDL_Renderer *renderer, SDL_Texture *texture)
+{
+    OGC_TextureData *ogc_tex = texture->driverdata;
+
+    OGC_load_texture(ogc_tex->texels, texture->w, texture->h,
+                     ogc_tex->format, SDL_ScaleModeNearest);
+
+    GX_ClearVtxDesc();
+    GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XY, GX_S16, 0);
+
+    GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_U8, 0);
+    GX_SetNumTexGens(1);
+
+    GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+    GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
+    GX_SetTevOp(GX_TEVSTAGE0, GX_REPLACE);
+    GX_SetNumTevStages(1);
+
+    GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
+    GX_Position2s16(0, 0);
+    GX_TexCoord2u8(0, 0);
+    GX_Position2s16(texture->w, 0);
+    GX_TexCoord2u8(1, 0);
+    GX_Position2s16(texture->w, texture->h);
+    GX_TexCoord2u8(1, 1);
+    GX_Position2s16(0, texture->h);
+    GX_TexCoord2u8(0, 1);
+    GX_End();
 }
 
 static void save_efb_to_texture(SDL_Texture *texture)
@@ -192,6 +227,42 @@ static void OGC_SetTextureScaleMode(SDL_Renderer *renderer,
      * loading it in OGC_load_texture(). */
 }
 
+static SDL_Texture *create_efb_texture(OGC_RenderData *data, SDL_Texture *target)
+{
+    /* Note: we do return a SDL_Texture, but not via SDL's API, since that does
+     * a bunch of other stuffs we don't care about. We create this texture for
+     * our internal use, so we initialize only those fields we care about. */
+    SDL_Texture *texture;
+    OGC_TextureData *ogc_tex;
+    u32 texture_size;
+
+    texture = SDL_calloc(1, sizeof(*texture));
+    if (!texture) goto fail_texture_alloc;
+
+    ogc_tex = SDL_calloc(1, sizeof(OGC_TextureData));
+    if (!ogc_tex) goto fail_ogc_tex_alloc;
+
+    ogc_tex->format = data->efb_pixel_format == GX_PF_RGB565_Z16 ?
+        GX_TF_RGB565 : GX_TF_RGBA8;
+    texture->w = target->w;
+    texture->h = target->h;
+    texture_size = GX_GetTexBufferSize(texture->w, texture->h, ogc_tex->format,
+                                       GX_FALSE, 0);
+    ogc_tex->texels = memalign(32, texture_size);
+    if (!ogc_tex->texels) goto fail_texels_alloc;
+
+    texture->driverdata = ogc_tex;
+    return texture;
+
+fail_texels_alloc:
+    SDL_free(ogc_tex->texels);
+fail_ogc_tex_alloc:
+    SDL_free(texture);
+fail_texture_alloc:
+    SDL_OutOfMemory();
+    return NULL;
+}
+
 static int OGC_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
 {
     OGC_RenderData *data = renderer->driverdata;
@@ -203,16 +274,11 @@ static int OGC_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
         }
 
         if (data->ops_after_present > 0) {
-            /* We should save the current EFB contents into the window data.
-             * However, it's unclear whether this is a possible scenario, since
-             * all actual drawing happens in RunCommandQueue() and this method
-             * will not be called in between of the drawing operations; but
-             * just to be on the safe side, log a warning. We can come back to
-             * this later and implement the EFB saving if we see that this
-             * happens in real life.
-             */
-            SDL_LogWarn(SDL_LOG_CATEGORY_RENDER,
-                        "Render target set after drawing!");
+            /* Save the current EFB contents if we already drew something onto
+             * it. We'll restore it later, when the rendering target is reset
+             * to NULL (the screen). */
+            data->saved_efb_texture = create_efb_texture(data, texture);
+            save_efb_to_texture(data->saved_efb_texture);
         }
 
         if (SDL_ISPIXELFORMAT_ALPHA(texture->format)) {
@@ -227,6 +293,17 @@ static int OGC_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
     if (desired_efb_pixel_format != data->efb_pixel_format) {
         data->efb_pixel_format = desired_efb_pixel_format;
         GX_SetPixelFmt(data->efb_pixel_format, GX_ZC_LINEAR);
+    }
+
+    /* Restore the EFB to how it was before the we started to render to a
+     * texture. */
+    if (!texture && data->saved_efb_texture) {
+        load_efb_from_texture(renderer, data->saved_efb_texture);
+        /* Flush the draw operation before destroying the texture */
+        GX_DrawDone();
+        OGC_DestroyTexture(renderer, data->saved_efb_texture);
+        SDL_free(data->saved_efb_texture);
+        data->saved_efb_texture = NULL;
     }
 
     return 0;
