@@ -533,6 +533,7 @@ static int OGC_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
         cmd = cmd->next;
     }
 
+    GX_DrawDone();
     return 0;
 }
 
