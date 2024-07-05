@@ -183,6 +183,12 @@ static const u32 sdl_buttons_classic[] =
 #define SDL_WII_NUM_BUTTONS_CLASSIC \
 	(sizeof(sdl_buttons_classic) / sizeof(sdl_buttons_classic[0]))
 
+#ifdef __wii__
+#define GC_JOYSTICK_FROM_INDEX(index) (index - num_wii_joysticks)
+#else
+#define GC_JOYSTICK_FROM_INDEX(index) (index)
+#endif
+
 /* Helpers to separate nunchuk vs classic buttons which share the
  * same scan codes. In particular, up on the classic controller is
  * the same as Z on the nunchuk. The numbers refer to the sdl_buttons_wii
@@ -668,7 +674,7 @@ static void _HandleGCJoystickUpdate(SDL_Joystick* joystick)
 	int i;
 	int axis;
 	joystick_hwdata *prev_state;
-	int index = joystick->index - num_wii_joysticks;
+	int index = GC_JOYSTICK_FROM_INDEX(joystick->index);
 
 	buttons = PAD_ButtonsHeld(index);
 	prev_state = (joystick_hwdata *)joystick->hwdata;
