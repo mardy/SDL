@@ -35,6 +35,21 @@ typedef struct
     int swap_interval;
 } OGC_GL_Context;
 
+/* Weak symbols for the opengx functions used by SDL, so that the client does
+ * not need to link to opengx, unless it actually uses OpenGL. */
+void __attribute__((weak)) ogx_initialize(void)
+{
+    SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO,
+                "%s() called but opengx not used in build!", __func__);
+}
+
+void __attribute__((weak)) *ogx_get_proc_address(const char *)
+{
+    SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO,
+                "%s() called but opengx not used in build!", __func__);
+    return NULL;
+}
+
 int SDL_OGC_GL_LoadLibrary(_THIS, const char *path)
 {
     return 0;
