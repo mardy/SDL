@@ -31,6 +31,7 @@
 #include "SDL_ogcpixels.h"
 
 #include "../SDL_sysvideo.h"
+#include "../../render/SDL_sysrender.h"
 
 #include <malloc.h>
 #include <ogc/cache.h>
@@ -203,6 +204,8 @@ void OGC_draw_cursor(_THIS)
     guMtxTransApply(mv, mv, mouse->x, mouse->y, 0);
     GX_LoadPosMtxImm(mv, GX_PNMTX1);
 
+    OGC_set_viewport(0, 0, screen_w, screen_h);
+
     GX_ClearVtxDesc();
     GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
     GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
@@ -214,12 +217,28 @@ void OGC_draw_cursor(_THIS)
     GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
     GX_SetNumTevStages(1);
     GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+    GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_FALSE);
+    GX_SetCullMode(GX_CULL_NONE);
+    GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+
 
     GX_SetNumTexGens(1);
     GX_SetCurrentMtx(GX_PNMTX1);
     draw_cursor_rect(curdata);
     GX_SetCurrentMtx(GX_PNMTX0);
     GX_DrawDone();
+
+    /* Restore default state for SDL (opengx restores it at every frame, so we
+     * don't care about it) */
+    GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
+    if (_this->windows) {
+        /* Restore previous viewport for the renderer */
+        SDL_Renderer *renderer = SDL_GetRenderer(_this->windows);
+        if (renderer) {
+            OGC_set_viewport(renderer->viewport.x, renderer->viewport.y,
+                             renderer->viewport.w, renderer->viewport.h);
+        }
+    }
 }
 
 #endif /* SDL_VIDEO_DRIVER_OGC */
