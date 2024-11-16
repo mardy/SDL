@@ -43,11 +43,24 @@ void __attribute__((weak)) ogx_initialize(void)
                 "%s() called but opengx not used in build!", __func__);
 }
 
+void __attribute__((weak)) ogx_stencil_create(OgxStencilFlags)
+{
+    SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO,
+                "%s() called but opengx not used in build!", __func__);
+}
+
 void __attribute__((weak)) *ogx_get_proc_address(const char *)
 {
     SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO,
                 "%s() called but opengx not used in build!", __func__);
     return NULL;
+}
+
+int __attribute__((weak)) ogx_prepare_swap_buffers()
+{
+    SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO,
+                "%s() called but opengx not used in build!", __func__);
+    return 0;
 }
 
 int SDL_OGC_GL_LoadLibrary(_THIS, const char *path)
@@ -71,6 +84,11 @@ SDL_GLContext SDL_OGC_GL_CreateContext(_THIS, SDL_Window * window)
     context->window = window;
     context->swap_interval = 1;
     ogx_initialize();
+    if (_this->gl_config.stencil_size > 0) {
+        OgxStencilFlags flags = 0; /* Don't care if Z gets dirty on discarded fragments */
+        if (_this->gl_config.stencil_size > 4) flags |= OGX_STENCIL_8BIT;
+        ogx_stencil_create(flags);
+    }
     return context;
 }
 
