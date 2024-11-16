@@ -176,10 +176,19 @@ void OGC_draw_cursor(_THIS)
     OGC_CursorData *curdata;
     Mtx mv;
     int screen_w, screen_h;
+    float angle = 0.0f;
 
     if (!mouse || !mouse->cursor_shown ||
         !mouse->cur_cursor || !mouse->cur_cursor->driverdata) {
         return;
+    }
+
+    /* If this is the default cursor, rotate it, and if it's not pointed at the
+     * screen, hide it */
+    if (mouse->cur_cursor == mouse->def_cursor) {
+        WPADData *data = WPAD_Data(mouse->mouseID);
+        angle = data->ir.angle;
+        if (!data->ir.valid) return;
     }
 
     screen_w = _this->displays[0].current_mode.w;
@@ -191,13 +200,8 @@ void OGC_draw_cursor(_THIS)
 
     guMtxIdentity(mv);
     guMtxScaleApply(mv, mv, screen_w / 640.0f, screen_h / 480.0f, 1.0f);
-    /* If this is the default cursor, rotate it too */
-    if (mouse->cur_cursor == mouse->def_cursor) {
+    if (angle != 0.0f) {
         Mtx rot;
-        float angle;
-        WPADData *data = WPAD_Data(mouse->mouseID);
-
-        angle = data->ir.angle;
         guMtxRotDeg(rot, 'z', angle);
         guMtxConcat(mv, rot, mv);
     }
