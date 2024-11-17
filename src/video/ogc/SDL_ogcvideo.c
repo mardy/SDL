@@ -42,6 +42,8 @@
 #include <ogc/system.h>
 #include <ogc/video.h>
 
+#include <opengx.h>
+
 #define DEFAULT_FIFO_SIZE 256 * 1024
 
 // Inverse of the VI_TVMODE macro
