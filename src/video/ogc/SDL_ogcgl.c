@@ -84,6 +84,7 @@ SDL_GLContext SDL_OGC_GL_CreateContext(_THIS, SDL_Window * window)
     context->window = window;
     context->swap_interval = 1;
     ogx_initialize();
+    glViewport(0, 0, window->w, window->h);
     if (_this->gl_config.stencil_size > 0) {
         OgxStencilFlags flags = 0; /* Don't care if Z gets dirty on discarded fragments */
         if (_this->gl_config.stencil_size > 4) flags |= OGX_STENCIL_8BIT;
