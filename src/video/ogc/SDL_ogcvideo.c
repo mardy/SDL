@@ -41,6 +41,7 @@
 #include <ogc/gx.h>
 #include <ogc/system.h>
 #include <ogc/video.h>
+#include <wiikeyboard/keyboard.h>
 
 #include <opengx.h>
 
@@ -315,6 +316,8 @@ int OGC_VideoInit(_THIS)
 
 #ifdef __wii__
     OGC_InitMouse(_this);
+    /* OGC_PumpEvents reads the keyboard, so we need to initialize it here */
+    KEYBOARD_Init(NULL);
 #endif
     return 0;
 }
