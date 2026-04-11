@@ -38,7 +38,6 @@
 #include <fat.h>
 #include <ogc/usbmouse.h>
 #include <ogcsys.h>
-#include <wiikeyboard/keyboard.h>
 #include <wiiuse/wpad.h>
 
 static void ShutdownCB()
@@ -73,7 +72,6 @@ int main(int argc, char *argv[])
     WPAD_SetVRes(WPAD_CHAN_ALL, 640, 480);
 
     MOUSE_Init();
-    KEYBOARD_Init(NULL);
     fatInitDefault();
 
     /* Call the user's main function. Make sure that argv contains at least one
