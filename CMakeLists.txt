@@ -207,7 +207,7 @@ if(EMSCRIPTEN)
   set(SDL_SHARED_AVAILABLE OFF)
 endif()
 
-if(VITA OR PSP OR PS2 OR N3DS OR RISCOS OR NGAGE)
+if(VITA OR PSP OR PS2 OR N3DS OR RISCOS OR NGAGE OR OGC)
   set(SDL_SHARED_AVAILABLE OFF)
 endif()
 
@@ -304,7 +304,7 @@ dep_option(SDL_SSE3                "Use SSE3 assembly routines" ON "SDL_ASSEMBLY
 dep_option(SDL_SSE4_1              "Use SSE4.1 assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_X86 OR SDL_CPU_X64" OFF)
 dep_option(SDL_SSE4_2              "Use SSE4.2 assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_X86 OR SDL_CPU_X64" OFF)
 dep_option(SDL_MMX                 "Use MMX assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_X86 OR SDL_CPU_X64" OFF)
-dep_option(SDL_ALTIVEC             "Use Altivec assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_POWERPC32 OR SDL_CPU_POWERPC64" OFF)
+dep_option(SDL_ALTIVEC             "Use Altivec assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_POWERPC32 OR SDL_CPU_POWERPC64;NOT OGC" OFF)
 dep_option(SDL_ARMNEON             "Use NEON assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_ARM32 OR SDL_CPU_ARM64" OFF)
 dep_option(SDL_LSX                 "Use LSX assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_LOONGARCH64" OFF)
 dep_option(SDL_LASX                "Use LASX assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_LOONGARCH64" OFF)
@@ -3335,6 +3335,21 @@ elseif(N3DS)
     "${SDL3_SOURCE_DIR}/src/io/n3ds/*.c"
     "${SDL3_SOURCE_DIR}/src/io/n3ds/*.h"
   )
+
+elseif(OGC)
+  set(SDL_TIME_OGC 1)
+  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/time/ogc/*.c")
+  set(HAVE_SDL_TIME TRUE)
+
+  set(SDL_TIMER_OGC 1)
+  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/timer/ogc/*.c")
+  set(HAVE_SDL_TIMERS TRUE)
+
+  set(SDL_PTHREADS ON)
+  set(HAVE_SDL_THREADS TRUE)
+  set(SDL_PTHREADS_SEM ON)
+  message(STATUS "pthread")
+  CheckPTHREAD()
 
 elseif(NGAGE)
 
