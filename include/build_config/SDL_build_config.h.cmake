@@ -380,6 +380,7 @@
 #cmakedefine SDL_TIME_PSP 1
 #cmakedefine SDL_TIME_PS2 1
 #cmakedefine SDL_TIME_N3DS 1
+#cmakedefine SDL_TIME_OGC 1
 #cmakedefine SDL_TIME_NGAGE 1
 
 #cmakedefine SDL_TIME_PRIVATE 1
@@ -392,6 +393,7 @@
 #cmakedefine SDL_TIMER_PSP 1
 #cmakedefine SDL_TIMER_PS2 1
 #cmakedefine SDL_TIMER_N3DS 1
+#cmakedefine SDL_TIMER_OGC 1
 
 #cmakedefine SDL_TIMER_PRIVATE 1
 
