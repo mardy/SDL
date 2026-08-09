@@ -3314,6 +3314,10 @@ elseif(N3DS)
   )
 
 elseif(OGC)
+  set(SDL_FILESYSTEM_OGC 1)
+  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/ogc/*.c")
+  set(HAVE_SDL_FILESYSTEM TRUE)
+
   set(SDL_TIME_OGC 1)
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/time/ogc/*.c")
   set(HAVE_SDL_TIME TRUE)

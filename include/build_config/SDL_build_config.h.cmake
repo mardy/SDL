@@ -521,6 +521,7 @@
 #cmakedefine SDL_FILESYSTEM_PSP 1
 #cmakedefine SDL_FILESYSTEM_PS2 1
 #cmakedefine SDL_FILESYSTEM_N3DS 1
+#cmakedefine SDL_FILESYSTEM_OGC 1
 
 #cmakedefine SDL_FILESYSTEM_PRIVATE 1
 
