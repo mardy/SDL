@@ -87,9 +87,4 @@ char *SDL_SYS_GetUserFolder(SDL_Folder folder)
     return NULL;
 }
 
-char *SDL_SYS_GetCurrentDirectory(void)
-{
-    return SDL_SYS_GetBasePath();
-}
-
 #endif /* SDL_FILESYSTEM_OGC */
