@@ -3349,6 +3349,10 @@ elseif(OGC)
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/timer/ogc/*.c")
   set(HAVE_SDL_TIMERS TRUE)
 
+  set(SDL_FSOPS_POSIX 1)
+  sdl_sources("${SDL3_SOURCE_DIR}/src/filesystem/posix/SDL_sysfsops.c")
+  set(HAVE_SDL_FSOPS TRUE)
+
   set(SDL_PTHREADS ON)
   set(HAVE_SDL_THREADS TRUE)
   set(SDL_PTHREADS_SEM ON)
