@@ -27,6 +27,7 @@
     !defined(SDL_PLATFORM_IOS) && \
     !defined(SDL_PLATFORM_TVOS) && \
     !defined(SDL_PLATFORM_EMSCRIPTEN) && \
+    !defined(SDL_PLATFORM_OGC) && \
     !defined(SDL_PLATFORM_PSP) && \
     !defined(SDL_PLATFORM_PS2) && \
     !defined(SDL_PLATFORM_3DS)

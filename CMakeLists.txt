@@ -3337,6 +3337,12 @@ elseif(N3DS)
   )
 
 elseif(OGC)
+  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/main/ogc/*.c")
+  sdl_link_dependency(main LIBS fat)
+  if(NINTENDO_WII)
+    sdl_link_dependency(keyboard LIBS wiikeyboard)
+  endif()
+
   set(SDL_FILESYSTEM_OGC 1)
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/ogc/*.c")
   set(HAVE_SDL_FILESYSTEM TRUE)
