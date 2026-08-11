@@ -3336,6 +3336,32 @@ elseif(OGC)
   sdl_sources("${SDL3_SOURCE_DIR}/src/filesystem/posix/SDL_sysfsops.c")
   set(HAVE_SDL_FSOPS TRUE)
 
+  if(SDL_VIDEO)
+    set(SDL_VIDEO_DRIVER_OGC 1)
+    set(SDL_VIDEO_RENDER_OGC 1)
+    sdl_glob_sources(
+      "${SDL3_SOURCE_DIR}/src/render/ogc/*.c"
+      "${SDL3_SOURCE_DIR}/src/render/ogc/*.h"
+      "${SDL3_SOURCE_DIR}/src/video/ogc/*.c"
+      "${SDL3_SOURCE_DIR}/src/video/ogc/*.h"
+    )
+    pkg_search_module(EGC embedded-game-controller REQUIRED)
+    sdl_include_directories(PRIVATE SYSTEM ${EGC_INCLUDE_DIRS})
+    sdl_link_dependency(egc LIBS embedded-game-controller)
+    if(NINTENDO_WII)
+      sdl_link_dependency(egc LIBS bt-embedded)
+    endif()
+    set(SDL_VIDEO_OPENGL 0)
+    set(HAVE_SDL_VIDEO TRUE)
+    if(SDL_OPENGL)
+      # TODO: is the next line needed?
+      pkg_search_module(OPENGX opengl REQUIRED IMPORTED_TARGET)
+      set(SDL_VIDEO_OPENGL 1)
+      set(HAVE_OPENGL TRUE)
+      sdl_link_dependency(opengx LIBS opengx)
+    endif()
+  endif()
+
   set(SDL_PTHREADS ON)
   set(HAVE_SDL_THREADS TRUE)
   set(SDL_PTHREADS_SEM ON)
