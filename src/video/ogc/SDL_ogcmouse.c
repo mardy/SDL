@@ -343,7 +343,7 @@ void OGC_restore_viewport(SDL_VideoDevice *_this)
     if (_this->windows) {
         /* Restore previous viewport for the renderer */
         SDL_Renderer *renderer = SDL_GetRenderer(_this->windows);
-        if (renderer) {
+        if (renderer && renderer->view->viewport.w > 0 && renderer->view->viewport.h > 0) {
             OGC_set_viewport(renderer->view->viewport.x, renderer->view->viewport.y,
                              renderer->view->viewport.w, renderer->view->viewport.h);
         }
