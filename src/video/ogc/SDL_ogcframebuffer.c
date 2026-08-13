@@ -36,17 +36,15 @@
 
 static void draw_screen_rect(SDL_Window *window)
 {
-    s16 z = 0;
-
     GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
-    GX_Position3s16(0, 0, z);
-    GX_TexCoord1x8(0);
-    GX_Position3s16(window->w, 0, z);
-    GX_TexCoord1x8(1);
-    GX_Position3s16(window->w, window->h, z);
-    GX_TexCoord1x8(2);
-    GX_Position3s16(0, window->h, z);
-    GX_TexCoord1x8(3);
+    GX_Position2s16(0, 0);
+    GX_TexCoord2u8(0, 0);
+    GX_Position2s16(window->w, 0);
+    GX_TexCoord2u8(1, 0);
+    GX_Position2s16(window->w, window->h);
+    GX_TexCoord2u8(1, 1);
+    GX_Position2s16(0, window->h);
+    GX_TexCoord2u8(0, 1);
     GX_End();
 }
 
@@ -110,6 +108,7 @@ bool SDL_OGC_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window,
     GX_InvalidateTexAll();
     OGC_load_texture(windowdata->texels, window->w, window->h, gx_format,
                      SDL_SCALEMODE_NEAREST);
+    OGC_setup_2d_drawing();
     draw_screen_rect(window);
     GX_DrawDone();
 
