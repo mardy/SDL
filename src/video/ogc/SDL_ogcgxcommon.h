@@ -29,6 +29,7 @@
 
 void OGC_draw_init(int w, int h);
 void OGC_set_viewport(int x, int y, int w, int h);
+void OGC_setup_2d_drawing();
 void OGC_load_texture(void *texels, int w, int h, u8 gx_format,
                       SDL_ScaleMode scale_mode);
 

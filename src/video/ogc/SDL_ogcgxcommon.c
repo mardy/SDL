@@ -29,17 +29,6 @@
 #include <ogc/gx.h>
 #include <ogc/video.h>
 
-static const f32 tex_pos[] __attribute__((aligned(32))) = {
-    0.0,
-    0.0,
-    1.0,
-    0.0,
-    1.0,
-    1.0,
-    0.0,
-    1.0,
-};
-
 void OGC_set_viewport(int x, int y, int w, int h)
 {
     Mtx44 proj;
@@ -52,27 +41,35 @@ void OGC_set_viewport(int x, int y, int w, int h)
     GX_LoadProjectionMtx(proj, GX_ORTHOGRAPHIC);
 }
 
+void OGC_setup_2d_drawing()
+{
+    GX_ClearVtxDesc();
+    GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XY, GX_S16, 0);
+    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_U8, 0);
+
+    GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+    GX_SetNumTexGens(1);
+
+    GX_SetTevOp(GX_TEVSTAGE0, GX_REPLACE);
+    GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
+    GX_SetNumTevStages(1);
+
+    GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_FALSE);
+    GX_SetCullMode(GX_CULL_NONE);
+    GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+}
+
 void OGC_draw_init(int w, int h)
 {
     SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "OGC_draw_init called with %d, %d", w, h);
 
-    GX_ClearVtxDesc();
-    GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
-    GX_SetVtxDesc(GX_VA_TEX0, GX_INDEX8);
+    OGC_setup_2d_drawing();
 
-    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_S16, 0);
-    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
-
-    GX_SetArray(GX_VA_TEX0, (void *)tex_pos, 2 * sizeof(f32));
-    GX_SetNumTexGens(1);
     GX_SetNumChans(1);
     GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_VTX, GX_SRC_VTX, 0,
                    GX_DF_NONE, GX_AF_NONE);
-
-    GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
-
-    GX_SetTevOp(GX_TEVSTAGE0, GX_REPLACE);
-    GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
 
     OGC_set_viewport(0, 0, w, h);
 
