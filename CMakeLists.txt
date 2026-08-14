@@ -3320,6 +3320,16 @@ elseif(OGC)
     sdl_link_dependency(keyboard LIBS wiikeyboard)
   endif()
 
+  if(SDL_AUDIO)
+    set(SDL_AUDIO_DRIVER_OGC 1)
+    sdl_glob_sources(
+      "${SDL3_SOURCE_DIR}/src/audio/ogc/*.c"
+      "${SDL3_SOURCE_DIR}/src/audio/ogc/*.h"
+    )
+    sdl_link_dependency(audio LIBS aesnd)
+    set(HAVE_SDL_AUDIO TRUE)
+  endif()
+
   set(SDL_FILESYSTEM_OGC 1)
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/ogc/*.c")
   set(HAVE_SDL_FILESYSTEM TRUE)
