@@ -3383,7 +3383,6 @@ elseif(OGC)
     # set(SDL_VIDEO_RENDER_OGL 1)
     sdl_glob_sources(
       "${SDL3_SOURCE_DIR}/src/render/ogc/*.c"
-      "${SDL3_SOURCE_DIR}/src/render/ogc/*.h"
       "${SDL3_SOURCE_DIR}/src/video/ogc/*.c"
       "${SDL3_SOURCE_DIR}/src/video/ogc/*.h"
     )

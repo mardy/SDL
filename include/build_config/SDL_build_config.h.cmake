@@ -464,6 +464,7 @@
 #cmakedefine SDL_VIDEO_RENDER_OGL 1
 #cmakedefine SDL_VIDEO_RENDER_OGL_ES2 1
 #cmakedefine SDL_VIDEO_RENDER_NGAGE 1
+#cmakedefine SDL_VIDEO_RENDER_OGC 1
 #cmakedefine SDL_VIDEO_RENDER_PS2 1
 #cmakedefine SDL_VIDEO_RENDER_PSP 1
 #cmakedefine SDL_VIDEO_RENDER_VITA_GXM 1
