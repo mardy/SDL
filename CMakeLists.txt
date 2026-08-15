@@ -3355,6 +3355,9 @@ elseif(OGC)
   if(SDL_VIDEO)
     set(SDL_VIDEO_DRIVER_OGC 1)
     set(SDL_VIDEO_RENDER_OGC 1)
+    # Disabled since we have the GX renderer, but this can also be used as an
+    # option:
+    # set(SDL_VIDEO_RENDER_OGL 1)
     sdl_glob_sources(
       "${SDL3_SOURCE_DIR}/src/render/ogc/*.c"
       "${SDL3_SOURCE_DIR}/src/render/ogc/*.h"
