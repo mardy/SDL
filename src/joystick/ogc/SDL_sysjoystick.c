@@ -214,6 +214,12 @@ static bool OGC_JoystickInit(void)
             sideways_joystick_env && strcmp(sideways_joystick_env, "1") == 0;
         egc_driver_wiimote_set_sideways_default(wiimote_sideways);
     }
+    /* Enable Wiimote's IR */
+    egc_input_device_enable_touch_point_default(true);
+
+    /* By default, all sensors in SDL are disabled */
+    egc_input_device_enable_accelerometer_default(false);
+    egc_input_device_enable_gyroscope_default(false);
 #endif
 
     OGC_register_joystick_callbacks(joystick_added_cb, joystick_removed_cb);
@@ -427,8 +433,26 @@ static bool OGC_JoystickSendEffect(SDL_Joystick *joystick, const void *data, int
 
 static bool OGC_JoystickSetSensorsEnabled(SDL_Joystick *joystick, bool enabled)
 {
-    /* EGC at the moment does not supports disabling the sensors */
-    return enabled ? true : SDL_Unsupported();
+    /* There is nothing console-specific here, but since the GameCube does not
+     * support any controllers with sensors, we disable this code in order to
+     * save some memory */
+#ifdef __wii__
+    egc_input_device_t *device = get_egc_device(joystick);
+    if (!device) {
+        return false;
+    }
+
+    for (int i = 0; i < device->desc->num_accelerometers; i++) {
+        egc_input_device_enable_accelerometer(device, i, enabled);
+    }
+
+    for (int i = 0; i < device->desc->num_gyroscopes; i++) {
+        egc_input_device_enable_gyroscope(device, i, enabled);
+    }
+    return true;
+#else /* GameCUbe: */
+    return SDL_Unsupported();
+#endif /* __wii__ */
 }
 
 static void OGC_JoystickUpdate(SDL_Joystick *joystick)
