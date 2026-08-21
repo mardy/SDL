@@ -64,8 +64,6 @@ static int print_controller_name(char *buffer, size_t size,
      (1 << EGC_GAMEPAD_BUTTON_DPAD_RIGHT))
 
 #ifdef __wii__
-static bool s_wiimote_sideways = false;
-
 static bool is_wiimote(egc_input_device_t *device)
 {
     const egc_device_description_t *desc = device->desc;
@@ -212,8 +210,9 @@ static bool OGC_JoystickInit(void)
     /* If this is set, the Wiimote directional keys will be translated. */
     {
         const char *sideways_joystick_env = getenv("SDL_WII_JOYSTICK_SIDEWAYS");
-        s_wiimote_sideways =
+        bool wiimote_sideways =
             sideways_joystick_env && strcmp(sideways_joystick_env, "1") == 0;
+        egc_driver_wiimote_set_sideways_default(wiimote_sideways);
     }
 #endif
 
@@ -383,16 +382,6 @@ static bool OGC_JoystickOpen(SDL_Joystick *joystick, int device_index)
                            desc->has_rumble);
 
 #ifdef __wii__
-    if (is_wiimote(controller->egc_device)) {
-        EgcWiimoteExpType expansion = joystick->hwdata->expansion =
-            get_wiimote_expansion(controller->egc_device);
-        if (s_wiimote_sideways &&
-            (expansion == EGC_WIIMOTE_EXP_NONE ||
-             expansion == EGC_WIIMOTE_EXP_MOTION_PLUS)) {
-            joystick->hwdata->rotated = true;
-        }
-    }
-
     if (desc->num_accelerometers > 0) {
         SDL_PrivateJoystickAddSensor(joystick, SDL_SENSOR_ACCEL, 100.0f);
         if (desc->num_accelerometers > 1) {
@@ -619,16 +608,6 @@ static bool OGC_JoystickGetGamepadMapping(int device_index, SDL_GamepadMapping *
         .righttrigger = egc_map_axis(axes, EGC_GAMEPAD_AXIS_RIGHT_TRIGGER, &i_axis),
     };
 
-#ifdef __wii__
-    if (s_wiimote_sideways && is_wiimote(device)) {
-        /* Remap buttons so that the 1 and 2 buttons on the wiimote become the
-         * primary ones */
-        out->a = (SDL_InputMapping){ EMappingKind_Button, EGC_GAMEPAD_BUTTON_WEST }; /* 2 */
-        out->b = (SDL_InputMapping){ EMappingKind_Button, EGC_GAMEPAD_BUTTON_NORTH }; /* 1 */
-        out->x = (SDL_InputMapping){ EMappingKind_Button, EGC_GAMEPAD_BUTTON_EAST }; /* B */
-        out->y = (SDL_InputMapping){ EMappingKind_Button, EGC_GAMEPAD_BUTTON_SOUTH }; /* A */
-    }
-#endif /* __wii__ */
     return true;
 }
 
